@@ -211,6 +211,31 @@ export default function App() {
     openCtxMenu(e, [
       { icon: "↗", label: "Open details", action: () => setSelectedItem(item) },
       "---",
+      {
+        icon: "⤷", label: "Add to collection", action: () => {
+          const nonArchived = collections.filter((c) => !c.archived);
+          setCtxMenu({
+            x: e.clientX, y: e.clientY,
+            menuItems: nonArchived.map((c) => ({
+              icon:  item.collections.includes(c.id) ? "✓" : " ",
+              label: `${c.icon} ${c.name}`,
+              action: () => {
+                const next = item.collections.includes(c.id)
+                  ? item.collections.filter((id) => id !== c.id)
+                  : [...item.collections, c.id];
+                handleUpdate(item.id, { collections: next });
+              },
+            })),
+          });
+        },
+      },
+      ...(activeView.type === "collection" ? [{
+        icon: "✕", label: "Remove from collection", action: () =>
+          handleUpdate(item.id, {
+            collections: item.collections.filter((id) => id !== activeView.id),
+          }),
+      }] : []),
+      "---",
       { icon: "🗑", label: "Delete", danger: true, action: () => handleDelete(item.id) },
     ]);
   };
