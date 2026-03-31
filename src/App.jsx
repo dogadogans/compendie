@@ -3,9 +3,10 @@ import { listen } from "@tauri-apps/api/event";
 import { readFile } from "@tauri-apps/plugin-fs";
 import {
   loadItems, addItem, updateItem, deleteItem, getImageUrl,
-  loadFolders, addFolder, renameFolder, deleteFolder,
+  loadCollections, addCollection, updateCollection, deleteCollection, archiveCollection,
 } from "./store";
 import ContextMenu from "./components/ContextMenu";
+import Sidebar from "./components/Sidebar";
 import "./App.css";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif"];
@@ -25,11 +26,10 @@ function ImageCard({ item, imageUrl, onClick, onContextMenu }) {
 }
 
 // ─── Add overlay ──────────────────────────────────────────────────────────────
-function AddOverlay({ imageFile, folders, onSave, onCancel }) {
+function AddOverlay({ imageFile, onSave, onCancel }) {
   const [title, setTitle] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [note, setNote] = useState("");
-  const [folderId, setFolderId] = useState("");
   const [previewUrl, setPreviewUrl] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -46,7 +46,7 @@ function AddOverlay({ imageFile, folders, onSave, onCancel }) {
     try {
       const bytes = new Uint8Array(await imageFile.arrayBuffer());
       const tags = tagInput.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
-      await onSave({ imageBytes: bytes, originalName: imageFile.name, title, tags, note, folderId: folderId || null });
+      await onSave({ imageBytes: bytes, originalName: imageFile.name, title, tags, note });
     } finally {
       setSaving(false);
     }
@@ -67,13 +67,6 @@ function AddOverlay({ imageFile, folders, onSave, onCancel }) {
             onChange={(e) => setTitle(e.target.value)} autoFocus />
           <input className="field-input" placeholder="Tags — comma separated" value={tagInput}
             onChange={(e) => setTagInput(e.target.value)} />
-          {folders.length > 0 && (
-            <select className="field-input field-select" value={folderId}
-              onChange={(e) => setFolderId(e.target.value)}>
-              <option value="">No folder</option>
-              {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-            </select>
-          )}
           <textarea className="field-input field-textarea" placeholder="Note (optional)"
             value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
           <div className="add-actions">
@@ -89,11 +82,10 @@ function AddOverlay({ imageFile, folders, onSave, onCancel }) {
 }
 
 // ─── Detail overlay ───────────────────────────────────────────────────────────
-function DetailOverlay({ item, imageUrl, folders, onClose, onUpdate, onDelete }) {
+function DetailOverlay({ item, imageUrl, onClose, onUpdate, onDelete }) {
   const [title, setTitle] = useState(item.title);
   const [tagInput, setTagInput] = useState(item.tags.join(", "));
   const [note, setNote] = useState(item.note);
-  const [folderId, setFolderId] = useState(item.folder_id || "");
   const [dirty, setDirty] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -101,7 +93,7 @@ function DetailOverlay({ item, imageUrl, folders, onClose, onUpdate, onDelete })
 
   const handleSave = async () => {
     const tags = tagInput.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
-    await onUpdate(item.id, { title, tags, note, folder_id: folderId || null });
+    await onUpdate(item.id, { title, tags, note });
     setDirty(false);
   };
 
@@ -129,10 +121,6 @@ function DetailOverlay({ item, imageUrl, folders, onClose, onUpdate, onDelete })
             value={title} onChange={mark(setTitle)} />
           <input className="field-input" placeholder="Tags — comma separated"
             value={tagInput} onChange={mark(setTagInput)} />
-          <select className="field-input field-select" value={folderId} onChange={mark(setFolderId)}>
-            <option value="">No folder</option>
-            {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
           <textarea className="field-input field-textarea" placeholder="No note"
             value={note} onChange={mark(setNote)} rows={4} />
           <p className="detail-date">{formattedDate}</p>
@@ -148,136 +136,32 @@ function DetailOverlay({ item, imageUrl, folders, onClose, onUpdate, onDelete })
   );
 }
 
-// ─── Sidebar ──────────────────────────────────────────────────────────────────
-function Sidebar({ folders, allTags, activeFolder, activeTag, onSelectFolder, onSelectTag,
-  onAddFolder, onRenameFolder, onDeleteFolder, onRenameTag, onDeleteTag,
-  onFolderContextMenu, onTagContextMenu }) {
-  const [newFolderName, setNewFolderName] = useState("");
-  const [addingFolder, setAddingFolder] = useState(false);
-  const [renamingId, setRenamingId] = useState(null);
-  const [renameValue, setRenameValue] = useState("");
-  const newFolderInputRef = useRef(null);
-
-  useEffect(() => {
-    if (addingFolder) newFolderInputRef.current?.focus();
-  }, [addingFolder]);
-
-  const submitNewFolder = async () => {
-    const name = newFolderName.trim();
-    if (name) await onAddFolder(name);
-    setNewFolderName("");
-    setAddingFolder(false);
-  };
-
-  const submitRename = async (id) => {
-    const name = renameValue.trim();
-    if (name) await onRenameFolder(id, name);
-    setRenamingId(null);
-  };
-
-  // Expose inline rename trigger to context menu
-  const startRename = (folder) => {
-    setRenamingId(folder.id);
-    setRenameValue(folder.name);
-  };
-
-  return (
-    <aside className="sidebar">
-      <div className="sidebar-logo">Tome</div>
-
-      <nav className="sidebar-nav">
-        <button className={`nav-item${!activeFolder && !activeTag ? " active" : ""}`}
-          onClick={() => { onSelectFolder(null); onSelectTag(null); }}>
-          All
-        </button>
-      </nav>
-
-      {/* Folders */}
-      <div className="sidebar-section">
-        <div className="sidebar-section-header">
-          <span>Folders</span>
-          <button className="section-add-btn" title="New folder"
-            onClick={() => setAddingFolder(true)}>+</button>
-        </div>
-
-        {addingFolder && (
-          <div className="folder-new-row">
-            <input ref={newFolderInputRef} className="folder-name-input" placeholder="Folder name"
-              value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submitNewFolder();
-                if (e.key === "Escape") { setAddingFolder(false); setNewFolderName(""); }
-              }}
-              onBlur={submitNewFolder} />
-          </div>
-        )}
-
-        {folders.map((folder) => (
-          <div key={folder.id}
-            className={`nav-item folder-item${activeFolder === folder.id ? " active" : ""}`}
-            onContextMenu={(e) => { e.preventDefault(); onFolderContextMenu(e, folder, () => startRename(folder)); }}>
-            {renamingId === folder.id ? (
-              <input className="folder-name-input" value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") submitRename(folder.id);
-                  if (e.key === "Escape") setRenamingId(null);
-                }}
-                onBlur={() => submitRename(folder.id)} autoFocus />
-            ) : (
-              <>
-                <span className="folder-name"
-                  onClick={() => onSelectFolder(activeFolder === folder.id ? null : folder.id)}>
-                  {folder.name}
-                </span>
-                <div className="folder-actions">
-                  <button className="folder-action-btn" title="Rename"
-                    onClick={(e) => { e.stopPropagation(); startRename(folder); }}>✎</button>
-                  <button className="folder-action-btn danger" title="Delete"
-                    onClick={(e) => { e.stopPropagation(); onDeleteFolder(folder.id); }}>×</button>
-                </div>
-              </>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Tags */}
-      {allTags.length > 0 && (
-        <div className="sidebar-section">
-          <div className="sidebar-section-header"><span>Tags</span></div>
-          {allTags.map((tag) => (
-            <button key={tag}
-              className={`nav-item${activeTag === tag ? " active" : ""}`}
-              onClick={() => onSelectTag(activeTag === tag ? null : tag)}
-              onContextMenu={(e) => { e.preventDefault(); onTagContextMenu(e, tag); }}>
-              {tag}
-            </button>
-          ))}
-        </div>
-      )}
-    </aside>
-  );
-}
-
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [items, setItems] = useState([]);
-  const [folders, setFolders] = useState([]);
-  const [imageUrls, setImageUrls] = useState({});
-  const [search, setSearch] = useState("");
-  const [activeFolder, setActiveFolder] = useState(null);
-  const [activeTag, setActiveTag] = useState(null);
-  const [pendingFile, setPendingFile] = useState(null);
+  const [items,        setItems]        = useState([]);
+  const [collections,  setCollections]  = useState([]);
+  const [imageUrls,    setImageUrls]    = useState({});
+  const [search,       setSearch]       = useState("");
+  const [activeView,   setActiveView]   = useState({ type: "all" });
   const [selectedItem, setSelectedItem] = useState(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [ctxMenu, setCtxMenu] = useState(null); // { x, y, menuItems }
+  const [pendingFile,  setPendingFile]  = useState(null);
+  const [isDragging,   setIsDragging]   = useState(false);
+  const [ctxMenu,      setCtxMenu]      = useState(null);
+  const [sidebarWidth, setSidebarWidth] = useState(
+    () => parseInt(localStorage.getItem("tome_sidebar_width") || "240")
+  );
+  const [panelWidth,   setPanelWidth]   = useState(
+    () => parseInt(localStorage.getItem("tome_panel_width")   || "320")
+  );
   const dragCounter = useRef(0);
   const fileInputRef = useRef(null);
 
+  // Suppress unused warning — panelWidth is stored for future detail panel use
+  void panelWidth; void setPanelWidth;
+
   useEffect(() => {
     loadItems().then(setItems).catch(console.error);
-    loadFolders().then(setFolders).catch(console.error);
+    loadCollections().then(setCollections).catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -330,11 +214,11 @@ export default function App() {
   }, []);
 
   const handleDragEnter = useCallback((e) => { e.preventDefault(); }, []);
-  const handleDragOver = useCallback((e) => { e.preventDefault(); }, []);
+  const handleDragOver  = useCallback((e) => { e.preventDefault(); }, []);
   const handleDragLeave = useCallback((e) => { e.preventDefault(); }, []);
 
   const handleSaveNew = async (data) => {
-    const item = await addItem({ ...data, folderId: data.folderId || activeFolder || null });
+    const item = await addItem({ ...data, collections: [] });
     setItems((prev) => [item, ...prev]);
     setPendingFile(null);
   };
@@ -354,110 +238,104 @@ export default function App() {
     }
   };
 
-  const handleAddFolder = async (name) => {
-    const folder = await addFolder(name);
-    setFolders((prev) => [...prev, folder]);
+  // ── Collection handlers ──────────────────────────────────────────────────────
+
+  const handleAddCollection = async ({ name, icon, parentId }) => {
+    const col = await addCollection({ name, icon, parentId });
+    setCollections((prev) => [...prev, col]);
   };
 
-  const handleRenameFolder = async (id, name) => {
-    const updated = await renameFolder(id, name);
-    setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)));
+  const handleRenameCollection = async (id, name) => {
+    const updated = await updateCollection(id, { name });
+    setCollections((prev) => prev.map((c) => (c.id === id ? updated : c)));
   };
 
-  const handleDeleteFolder = async (id) => {
-    await deleteFolder(id);
-    setFolders((prev) => prev.filter((f) => f.id !== id));
-    setItems((prev) => prev.map((i) => i.folder_id === id ? { ...i, folder_id: null } : i));
-    if (activeFolder === id) setActiveFolder(null);
+  const handleArchiveCollection = async (id) => {
+    const updated = await archiveCollection(id);
+    setCollections((prev) => prev.map((c) => (c.id === id ? updated : c)));
+    if (activeView.type === "collection" && activeView.id === id)
+      setActiveView({ type: "all" });
   };
 
-  // Rename a tag across all items
-  const handleRenameTag = async (oldTag, newTag) => {
-    const affected = items.filter((i) => i.tags.includes(oldTag));
-    await Promise.all(affected.map((i) =>
-      updateItem(i.id, { tags: i.tags.map((t) => t === oldTag ? newTag : t) })
-    ));
-    setItems((prev) => prev.map((i) =>
-      i.tags.includes(oldTag) ? { ...i, tags: i.tags.map((t) => t === oldTag ? newTag : t) } : i
-    ));
-    if (activeTag === oldTag) setActiveTag(newTag);
+  const handleDeleteCollection = async (id) => {
+    const col = collections.find((c) => c.id === id);
+    const ok  = window.confirm(
+      `Delete "${col?.name}"? Your images won't be deleted — they'll stay in All and any other collections they belong to.`
+    );
+    if (!ok) return;
+    await deleteCollection(id);
+    const removedIds = new Set([id, ...collections.filter((c) => c.parent_id === id).map((c) => c.id)]);
+    setCollections((prev) => prev.filter((c) => !removedIds.has(c.id)));
+    setItems((prev) => prev.map((i) => ({
+      ...i,
+      collections: i.collections.filter((cid) => !removedIds.has(cid)),
+    })));
+    if (activeView.type === "collection" && activeView.id === id)
+      setActiveView({ type: "all" });
   };
 
-  // Delete a tag from all items
-  const handleDeleteTag = async (tag) => {
-    const affected = items.filter((i) => i.tags.includes(tag));
-    await Promise.all(affected.map((i) =>
-      updateItem(i.id, { tags: i.tags.filter((t) => t !== tag) })
-    ));
-    setItems((prev) => prev.map((i) =>
-      i.tags.includes(tag) ? { ...i, tags: i.tags.filter((t) => t !== tag) } : i
-    ));
-    if (activeTag === tag) setActiveTag(null);
-  };
+  // ── Sidebar resize ───────────────────────────────────────────────────────────
 
-  // ── Context menu builders ──────────────────────────────────────────────────
+  const handleSidebarResizeStart = useCallback((e) => {
+    e.preventDefault();
+    const startX     = e.clientX;
+    const startWidth = sidebarWidth;
+    const onMove = (ev) => {
+      const w = Math.min(340, Math.max(200, startWidth + ev.clientX - startX));
+      setSidebarWidth(w);
+      localStorage.setItem("tome_sidebar_width", w);
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup",   onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup",   onUp);
+  }, [sidebarWidth]);
+
+  // ── Context menus ────────────────────────────────────────────────────────────
 
   const openCtxMenu = (e, menuItems) => {
     setCtxMenu({ x: e.clientX, y: e.clientY, menuItems });
+  };
+
+  const handleCollectionContextMenu = (e, collection, startRename) => {
+    openCtxMenu(e, [
+      { icon: "✎", label: "Rename",  action: startRename },
+      { icon: "📦", label: "Archive", action: () => handleArchiveCollection(collection.id) },
+      "---",
+      { icon: "🗑", label: "Delete", danger: true, action: () => handleDeleteCollection(collection.id) },
+    ]);
   };
 
   const handleCardContextMenu = (e, item) => {
     openCtxMenu(e, [
       { icon: "↗", label: "Open details", action: () => setSelectedItem(item) },
       "---",
-      {
-        icon: "⤷", label: "Move to folder", action: () => {
-          // Show a second context menu with folder choices
-          setCtxMenu({
-            x: e.clientX, y: e.clientY,
-            menuItems: [
-              { icon: "", label: "No folder", action: () => handleUpdate(item.id, { folder_id: null }) },
-              ...folders.map((f) => ({
-                icon: item.folder_id === f.id ? "✓" : " ",
-                label: f.name,
-                action: () => handleUpdate(item.id, { folder_id: f.id }),
-              })),
-            ],
-          });
-        },
-      },
-      "---",
       { icon: "🗑", label: "Delete", danger: true, action: () => handleDelete(item.id) },
     ]);
   };
 
-  const handleFolderContextMenu = (e, folder, startRename) => {
-    openCtxMenu(e, [
-      { icon: "✎", label: "Rename", action: startRename },
-      "---",
-      { icon: "🗑", label: "Delete", danger: true, action: () => handleDeleteFolder(folder.id) },
-    ]);
-  };
+  // ── Filtering ────────────────────────────────────────────────────────────────
 
-  const handleTagContextMenu = (e, tag) => {
-    openCtxMenu(e, [
-      {
-        icon: "✎", label: "Rename tag",
-        inputDefault: tag,
-        action: (newName) => {
-          if (newName !== tag) handleRenameTag(tag, newName.toLowerCase());
-        },
-      },
-      "---",
-      { icon: "🗑", label: "Delete tag", danger: true, action: () => handleDeleteTag(tag) },
-    ]);
-  };
-
-  const allTags = [...new Set(items.flatMap((i) => i.tags))].sort();
+  const getDescendantIds = useCallback((id) => {
+    const ids = new Set([id]);
+    collections.forEach((c) => { if (c.parent_id === id) ids.add(c.id); });
+    return ids;
+  }, [collections]);
 
   const filtered = items.filter((item) => {
-    if (activeFolder && item.folder_id !== activeFolder) return false;
-    if (activeTag && !item.tags.includes(activeTag)) return false;
+    if (activeView.type === "unorganized" && item.collections.length > 0) return false;
+    if (activeView.type === "collection") {
+      const ids = getDescendantIds(activeView.id);
+      if (!item.collections.some((cid) => ids.has(cid))) return false;
+    }
+    if (activeView.type === "tag" && !item.tags.includes(activeView.tag)) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
       item.title.toLowerCase().includes(q) ||
-      item.tags.some((t) => t.includes(q)) ||
+      item.tags.some((t) => t.includes(q))  ||
       item.note.toLowerCase().includes(q)
     );
   });
@@ -469,17 +347,18 @@ export default function App() {
       onDragLeave={handleDragLeave}>
 
       <Sidebar
-        folders={folders} allTags={allTags}
-        activeFolder={activeFolder} activeTag={activeTag}
-        onSelectFolder={(id) => { setActiveFolder(id); setActiveTag(null); }}
-        onSelectTag={(tag) => { setActiveTag(tag); setActiveFolder(null); }}
-        onAddFolder={handleAddFolder}
-        onRenameFolder={handleRenameFolder}
-        onDeleteFolder={handleDeleteFolder}
-        onRenameTag={handleRenameTag}
-        onDeleteTag={handleDeleteTag}
-        onFolderContextMenu={handleFolderContextMenu}
-        onTagContextMenu={handleTagContextMenu}
+        collections={collections}
+        items={items}
+        activeView={activeView}
+        onSelectAll={() => setActiveView({ type: "all" })}
+        onSelectUnorganized={() => setActiveView({ type: "unorganized" })}
+        onSelectCollection={(id) => setActiveView({ type: "collection", id })}
+        onSelectTag={(tag) => setActiveView({ type: "tag", tag })}
+        onAddCollection={handleAddCollection}
+        onRenameCollection={handleRenameCollection}
+        onContextMenu={handleCollectionContextMenu}
+        width={sidebarWidth}
+        onResizeStart={handleSidebarResizeStart}
       />
 
       <main className="main">
@@ -518,13 +397,13 @@ export default function App() {
       )}
 
       {pendingFile && (
-        <AddOverlay imageFile={pendingFile} folders={folders}
+        <AddOverlay imageFile={pendingFile}
           onSave={handleSaveNew} onCancel={() => setPendingFile(null)} />
       )}
 
       {selectedItem && !pendingFile && (
         <DetailOverlay item={selectedItem} imageUrl={imageUrls[selectedItem.id]}
-          folders={folders} onClose={() => setSelectedItem(null)}
+          onClose={() => setSelectedItem(null)}
           onUpdate={handleUpdate} onDelete={handleDelete} />
       )}
     </div>
