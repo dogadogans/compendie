@@ -34,6 +34,7 @@ export default function App() {
   );
   const dragCounter = useRef(0);
   const fileInputRef = useRef(null);
+  const loadedIds = useRef(new Set());
 
   useEffect(() => {
     loadItems().then(setItems).catch(console.error);
@@ -45,10 +46,13 @@ export default function App() {
     const load = async () => {
       const newUrls = {};
       await Promise.all(items.map(async (item) => {
-        if (imageUrls[item.id]) return;
+        if (loadedIds.current.has(item.id)) return;
         try {
           const url = await getImageUrl(item.image_path);
-          if (!cancelled) newUrls[item.id] = url;
+          if (!cancelled) {
+            newUrls[item.id] = url;
+            loadedIds.current.add(item.id);
+          }
         } catch (e) { console.warn("Failed to load image for", item.id, e); }
       }));
       if (!cancelled && Object.keys(newUrls).length > 0)
@@ -111,6 +115,7 @@ export default function App() {
   const handleDelete = async (id) => {
     await deleteItem(id);
     setItems((prev) => prev.filter((i) => i.id !== id));
+    setSelectedItem((prev) => (prev?.id === id ? null : prev));
     if (imageUrls[id]) {
       URL.revokeObjectURL(imageUrls[id]);
       setImageUrls((prev) => { const n = { ...prev }; delete n[id]; return n; });
