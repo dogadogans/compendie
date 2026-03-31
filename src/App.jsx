@@ -5,6 +5,7 @@ import {
   loadItems, addItem, updateItem, deleteItem, getImageUrl,
   loadCollections, addCollection, updateCollection, deleteCollection, archiveCollection,
 } from "./store";
+import AddOverlay from "./components/AddOverlay";
 import ContextMenu from "./components/ContextMenu";
 import Sidebar from "./components/Sidebar";
 import Grid from "./components/Grid";
@@ -13,62 +14,6 @@ import "./App.css";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif"];
 const MIME = { png:"image/png", jpg:"image/jpeg", jpeg:"image/jpeg", gif:"image/gif", webp:"image/webp", bmp:"image/bmp", avif:"image/avif" };
-
-// ─── Add overlay ──────────────────────────────────────────────────────────────
-function AddOverlay({ imageFile, onSave, onCancel }) {
-  const [title, setTitle] = useState("");
-  const [tagInput, setTagInput] = useState("");
-  const [note, setNote] = useState("");
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!imageFile) return;
-    const url = URL.createObjectURL(imageFile);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [imageFile]);
-
-  const handleSave = async () => {
-    if (!imageFile) return;
-    setSaving(true);
-    try {
-      const bytes = new Uint8Array(await imageFile.arrayBuffer());
-      const tags = tagInput.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
-      await onSave({ imageBytes: bytes, originalName: imageFile.name, title, tags, note });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSave(); }
-    if (e.key === "Escape") onCancel();
-  };
-
-  return (
-    <div className="overlay" onKeyDown={handleKeyDown}>
-      <div className="overlay-backdrop" onClick={onCancel} />
-      <div className="add-panel">
-        {previewUrl && <div className="add-preview"><img src={previewUrl} alt="preview" /></div>}
-        <div className="add-fields">
-          <input className="field-input" placeholder="Title (optional)" value={title}
-            onChange={(e) => setTitle(e.target.value)} autoFocus />
-          <input className="field-input" placeholder="Tags — comma separated" value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)} />
-          <textarea className="field-input field-textarea" placeholder="Note (optional)"
-            value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
-          <div className="add-actions">
-            <button className="btn-ghost" onClick={onCancel} disabled={saving}>Cancel</button>
-            <button className="btn-primary" onClick={handleSave} disabled={saving}>
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
@@ -149,7 +94,10 @@ export default function App() {
   const handleDragLeave = useCallback((e) => { e.preventDefault(); }, []);
 
   const handleSaveNew = async (data) => {
-    const item = await addItem({ ...data, collections: [] });
+    const collectionIds = data.collectionId
+      ? [data.collectionId]
+      : activeView.type === "collection" ? [activeView.id] : [];
+    const item = await addItem({ ...data, collections: collectionIds });
     setItems((prev) => [item, ...prev]);
     setPendingFile(null);
   };
@@ -349,8 +297,12 @@ export default function App() {
       )}
 
       {pendingFile && (
-        <AddOverlay imageFile={pendingFile}
-          onSave={handleSaveNew} onCancel={() => setPendingFile(null)} />
+        <AddOverlay
+          imageFile={pendingFile}
+          collections={collections.filter((c) => !c.archived)}
+          onSave={handleSaveNew}
+          onCancel={() => setPendingFile(null)}
+        />
       )}
 
     </div>
