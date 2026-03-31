@@ -8,6 +8,7 @@ import {
 import ContextMenu from "./components/ContextMenu";
 import Sidebar from "./components/Sidebar";
 import Grid from "./components/Grid";
+import DetailPanel from "./components/DetailPanel";
 import "./App.css";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif"];
@@ -69,61 +70,6 @@ function AddOverlay({ imageFile, onSave, onCancel }) {
   );
 }
 
-// ─── Detail overlay ───────────────────────────────────────────────────────────
-function DetailOverlay({ item, imageUrl, onClose, onUpdate, onDelete }) {
-  const [title, setTitle] = useState(item.title);
-  const [tagInput, setTagInput] = useState(item.tags.join(", "));
-  const [note, setNote] = useState(item.note);
-  const [dirty, setDirty] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  const mark = (setter) => (e) => { setter(e.target.value); setDirty(true); };
-
-  const handleSave = async () => {
-    const tags = tagInput.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
-    await onUpdate(item.id, { title, tags, note });
-    setDirty(false);
-  };
-
-  const handleDelete = async () => {
-    setDeleting(true);
-    try { await onDelete(item.id); onClose(); }
-    finally { setDeleting(false); }
-  };
-
-  const formattedDate = new Date(item.created_at).toLocaleDateString("en-US", {
-    year: "numeric", month: "long", day: "numeric",
-  });
-
-  return (
-    <div className="overlay" onKeyDown={(e) => e.key === "Escape" && onClose()} tabIndex={-1}>
-      <div className="overlay-backdrop" onClick={onClose} />
-      <div className="detail-panel">
-        <div className="detail-image-wrap">
-          {imageUrl
-            ? <img src={imageUrl} alt={item.title || "image"} />
-            : <div className="card-placeholder" style={{ height: 300 }} />}
-        </div>
-        <div className="detail-fields">
-          <input className="field-input field-title" placeholder="Untitled"
-            value={title} onChange={mark(setTitle)} />
-          <input className="field-input" placeholder="Tags — comma separated"
-            value={tagInput} onChange={mark(setTagInput)} />
-          <textarea className="field-input field-textarea" placeholder="No note"
-            value={note} onChange={mark(setNote)} rows={4} />
-          <p className="detail-date">{formattedDate}</p>
-          <div className="detail-actions">
-            <button className="btn-danger" onClick={handleDelete} disabled={deleting}>
-              {deleting ? "Deleting…" : "Delete"}
-            </button>
-            {dirty && <button className="btn-primary" onClick={handleSave}>Save</button>}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [items,        setItems]        = useState([]);
@@ -143,9 +89,6 @@ export default function App() {
   );
   const dragCounter = useRef(0);
   const fileInputRef = useRef(null);
-
-  // Suppress unused warning — panelWidth is stored for future detail panel use
-  void panelWidth; void setPanelWidth;
 
   useEffect(() => {
     loadItems().then(setItems).catch(console.error);
@@ -281,6 +224,26 @@ export default function App() {
     document.addEventListener("mouseup",   onUp);
   }, [sidebarWidth]);
 
+  // ── Panel resize ─────────────────────────────────────────────────────────────
+
+  const handlePanelResizeStart = useCallback((e) => {
+    e.preventDefault();
+    const startX     = e.clientX;
+    const startWidth = panelWidth;
+    const onMove = (ev) => {
+      // Panel is on the right — dragging left makes it wider
+      const w = Math.min(560, Math.max(260, startWidth - (ev.clientX - startX)));
+      setPanelWidth(w);
+      localStorage.setItem("tome_panel_width", w);
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup",   onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup",   onUp);
+  }, [panelWidth]);
+
   // ── Context menus ────────────────────────────────────────────────────────────
 
   const openCtxMenu = (e, menuItems) => {
@@ -366,6 +329,18 @@ export default function App() {
             if (file) setPendingFile(file);
             e.target.value = "";
           }} />
+        {selectedItem && !pendingFile && (
+          <DetailPanel
+            item={selectedItem}
+            imageUrl={imageUrls[selectedItem.id]}
+            collections={collections}
+            onUpdate={handleUpdate}
+            onDelete={handleDelete}
+            onClose={() => setSelectedItem(null)}
+            width={panelWidth}
+            onResizeStart={handlePanelResizeStart}
+          />
+        )}
       </div>
 
       {ctxMenu && (
@@ -378,11 +353,6 @@ export default function App() {
           onSave={handleSaveNew} onCancel={() => setPendingFile(null)} />
       )}
 
-      {selectedItem && !pendingFile && (
-        <DetailOverlay item={selectedItem} imageUrl={imageUrls[selectedItem.id]}
-          onClose={() => setSelectedItem(null)}
-          onUpdate={handleUpdate} onDelete={handleDelete} />
-      )}
     </div>
   );
 }
