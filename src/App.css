@@ -124,13 +124,16 @@ html, body, #root { height: 100%; overflow: hidden; }
 
 /* ── Sidebar ─────────────────────────────────────────────────────────────── */
 .sidebar {
-  width: var(--sidebar-w);
   flex-shrink: 0;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   background: var(--surface);
   overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  min-width: 200px;
+  max-width: 340px;
 }
 
 .sidebar-logo {
@@ -565,11 +568,6 @@ html, body, #root { height: 100%; overflow: hidden; }
 .btn-danger:disabled { opacity: 0.4; cursor: default; }
 
 /* ── Sidebar (new collections system) ───────────────────────── */
-.sidebar {
-  position: relative;
-  min-width: 200px;
-  max-width: 340px;
-}
 
 .sidebar-divider {
   height: 1px;
