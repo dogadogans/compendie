@@ -667,3 +667,19 @@ html, body, #root { height: 100%; overflow: hidden; }
   z-index: 10;
 }
 .sidebar-resize-handle:hover { background: var(--border); }
+
+/* ── Layout additions ────────────────────────────────────────── */
+.main-area {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.grid-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}

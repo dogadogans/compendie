@@ -7,23 +7,11 @@ import {
 } from "./store";
 import ContextMenu from "./components/ContextMenu";
 import Sidebar from "./components/Sidebar";
+import Grid from "./components/Grid";
 import "./App.css";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif"];
 const MIME = { png:"image/png", jpg:"image/jpeg", jpeg:"image/jpeg", gif:"image/gif", webp:"image/webp", bmp:"image/bmp", avif:"image/avif" };
-
-// ─── Image card ───────────────────────────────────────────────────────────────
-function ImageCard({ item, imageUrl, onClick, onContextMenu }) {
-  return (
-    <div className="card" onClick={() => onClick(item)}
-      onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, item); }}
-      title={item.title || undefined}>
-      {imageUrl
-        ? <img src={imageUrl} alt={item.title || "image"} loading="lazy" />
-        : <div className="card-placeholder" />}
-    </div>
-  );
-}
 
 // ─── Add overlay ──────────────────────────────────────────────────────────────
 function AddOverlay({ imageFile, onSave, onCancel }) {
@@ -361,35 +349,24 @@ export default function App() {
         onResizeStart={handleSidebarResizeStart}
       />
 
-      <main className="main">
-        <header className="toolbar">
-          <input className="search-input" type="search" placeholder="Search…"
-            value={search} onChange={(e) => setSearch(e.target.value)} />
-          <button className="btn-add" onClick={() => fileInputRef.current?.click()}>+ Add</button>
-          <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) setPendingFile(file);
-              e.target.value = "";
-            }} />
-        </header>
-
-        {filtered.length === 0 ? (
-          <div className={`empty-state${isDragging ? " drop-active" : ""}`}>
-            {isDragging ? "Drop to save"
-              : items.length === 0 ? "Drag an image in or paste with Ctrl+V to get started."
-              : "No items match your filter."}
-          </div>
-        ) : (
-          <div className={`grid${isDragging ? " drop-active" : ""}`}>
-            {isDragging && <div className="grid-drop-overlay"><span>Drop to save</span></div>}
-            {filtered.map((item) => (
-              <ImageCard key={item.id} item={item} imageUrl={imageUrls[item.id]}
-                onClick={setSelectedItem} onContextMenu={handleCardContextMenu} />
-            ))}
-          </div>
-        )}
-      </main>
+      <div className="main-area">
+        <Grid
+          items={filtered}
+          imageUrls={imageUrls}
+          search={search}
+          onSearch={setSearch}
+          onCardClick={setSelectedItem}
+          onCardContextMenu={handleCardContextMenu}
+          onAddClick={() => fileInputRef.current?.click()}
+          isDragging={isDragging}
+        />
+        <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) setPendingFile(file);
+            e.target.value = "";
+          }} />
+      </div>
 
       {ctxMenu && (
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.menuItems}
