@@ -44,16 +44,24 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const newUrls = {};
-      await Promise.all(items.map(async (item) => {
-        if (loadedIds.current.has(item.id)) return;
-        try {
-          const url = await getImageUrl(item.image_path);
-          if (!cancelled) {
-            newUrls[item.id] = url;
-            loadedIds.current.add(item.id);
+      const tasks = [];
+      for (const item of items) {
+        if (item.type === "flow") {
+          for (const screen of (item.screens || [])) {
+            if (!loadedIds.current.has(screen.id))
+              tasks.push({ id: screen.id, path: screen.image_path });
           }
-        } catch (e) { console.warn("Failed to load image for", item.id, e); }
+        } else {
+          if (!loadedIds.current.has(item.id))
+            tasks.push({ id: item.id, path: item.image_path });
+        }
+      }
+      const newUrls = {};
+      await Promise.all(tasks.map(async ({ id, path }) => {
+        try {
+          const url = await getImageUrl(path);
+          if (!cancelled) { newUrls[id] = url; loadedIds.current.add(id); }
+        } catch (e) { console.warn("Failed to load image", id, e); }
       }));
       if (!cancelled && Object.keys(newUrls).length > 0)
         setImageUrls((prev) => ({ ...prev, ...newUrls }));
