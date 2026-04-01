@@ -27,6 +27,7 @@ export default function FlowBuilder({
   const [pickerOpen,  setPickerOpen]  = useState(false);
   const [saving,      setSaving]      = useState(false);
   const [dragIdx,     setDragIdx]     = useState(null);
+  const dragIdxRef = useRef(null); // ref so handlers always see latest value
 
   // Track object URLs we create so we can revoke on unmount
   const ownedUrls = useRef([]);
@@ -35,8 +36,8 @@ export default function FlowBuilder({
   // Ctrl+V paste anywhere in the overlay
   useEffect(() => {
     const onPaste = (e) => {
-      const file = e.clipboardData?.files?.[0];
-      if (file?.type.startsWith("image/")) addScreenFile(file);
+      const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type.startsWith("image/"));
+      if (files.length) addScreenFiles(files);
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
@@ -49,6 +50,15 @@ export default function FlowBuilder({
       ...prev,
       { id: uuidv4(), file, previewUrl, image_path: null, note: "" },
     ]);
+  };
+
+  const addScreenFiles = (files) => {
+    const newScreens = Array.from(files).map((file) => {
+      const previewUrl = URL.createObjectURL(file);
+      ownedUrls.current.push(previewUrl);
+      return { id: uuidv4(), file, previewUrl, image_path: null, note: "" };
+    });
+    setScreens((prev) => [...prev, ...newScreens]);
   };
 
   const addScreenFromItem = (item) => {
@@ -68,15 +78,17 @@ export default function FlowBuilder({
   const removeScreen = (idx) =>
     setScreens((prev) => prev.filter((_, i) => i !== idx));
 
-  // Drag-to-reorder
+  // Drag-to-reorder — use ref so handler always sees current drag position
   const handleDragEnterScreen = (idx) => {
-    if (dragIdx === null || dragIdx === idx) return;
+    const from = dragIdxRef.current;
+    if (from === null || from === idx) return;
     setScreens((prev) => {
       const next = [...prev];
-      const [moved] = next.splice(dragIdx, 1);
+      const [moved] = next.splice(from, 1);
       next.splice(idx, 0, moved);
       return next;
     });
+    dragIdxRef.current = idx;
     setDragIdx(idx);
   };
 
@@ -139,10 +151,10 @@ export default function FlowBuilder({
                   key={screen.id}
                   className={`flow-tray-thumb${dragIdx === idx ? " dragging" : ""}`}
                   draggable
-                  onDragStart={() => setDragIdx(idx)}
+                  onDragStart={() => { dragIdxRef.current = idx; setDragIdx(idx); }}
                   onDragEnter={() => handleDragEnterScreen(idx)}
                   onDragOver={(e) => e.preventDefault()}
-                  onDragEnd={() => setDragIdx(null)}
+                  onDragEnd={() => { dragIdxRef.current = null; setDragIdx(null); }}
                 >
                   {screen.previewUrl
                     ? <img src={screen.previewUrl} alt={`Screen ${idx + 1}`} />
@@ -161,10 +173,10 @@ export default function FlowBuilder({
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
+                multiple
                 style={{ display: "none" }}
                 onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) addScreenFile(f);
+                  if (e.target.files?.length) addScreenFiles(e.target.files);
                   e.target.value = "";
                 }}
               />

@@ -1273,3 +1273,34 @@ html, body, #root { height: 100%; overflow: hidden; }
 }
 .flow-detail-panel .panel-note:focus { border-color: rgba(255, 255, 255, 0.25); }
 .flow-detail-panel .panel-note::placeholder { color: rgba(255, 255, 255, 0.3); }
+
+/* ── FlowDetail zoom controls ────────────────────────────────────────────── */
+.flow-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 3px 6px;
+}
+
+.flow-zoom-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: 3px;
+  transition: color 0.1s;
+}
+.flow-zoom-btn:hover:not(:disabled) { color: #fff; }
+.flow-zoom-btn:disabled { opacity: 0.3; cursor: default; }
+
+.flow-zoom-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  min-width: 32px;
+  text-align: center;
+}
