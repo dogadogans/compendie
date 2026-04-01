@@ -932,3 +932,226 @@ html, body, #root { height: 100%; overflow: hidden; }
   backdrop-filter: blur(4px);
   pointer-events: none;
 }
+
+/* ── FlowBuilder overlay ─────────────────────────────────────────────────── */
+.flow-builder-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flow-builder-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.flow-builder-panel {
+  position: relative;
+  z-index: 1;
+  background: var(--surface);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  width: 90vw;
+  max-width: 900px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.flow-builder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.flow-builder-title-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text);
+}
+.flow-builder-title-input::placeholder { color: var(--muted); font-weight: 400; }
+
+.flow-builder-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.flow-builder-tray {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px;
+  gap: 12px;
+}
+
+.flow-builder-screens {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-content: flex-start;
+}
+
+.flow-tray-empty {
+  width: 100%;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 20px 0;
+  text-align: center;
+}
+
+.flow-tray-thumb {
+  position: relative;
+  width: 90px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1.5px solid var(--border);
+  cursor: grab;
+  background: var(--bg);
+  transition: opacity 0.15s;
+}
+.flow-tray-thumb.dragging { opacity: 0.4; }
+.flow-tray-thumb img {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+}
+
+.flow-tray-thumb-placeholder {
+  width: 90px;
+  height: 120px;
+  background: var(--border);
+}
+
+.flow-tray-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  background: rgba(0,0,0,0.5);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.flow-tray-thumb:hover .flow-tray-remove { opacity: 1; }
+
+.flow-tray-num {
+  position: absolute;
+  bottom: 3px;
+  left: 4px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.8);
+  background: rgba(0,0,0,0.45);
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.4;
+}
+
+.flow-tray-add-row {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.flow-picker-panel {
+  width: 220px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.flow-picker-header {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.flow-picker-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 10px;
+  align-content: flex-start;
+}
+
+.flow-picker-empty {
+  grid-column: 1/-1;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 16px 0;
+}
+
+.flow-picker-thumb {
+  position: relative;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  background: var(--bg);
+  transition: border-color 0.1s;
+}
+.flow-picker-thumb:hover { border-color: var(--focus-border); }
+.flow-picker-thumb.selected { border-color: var(--text); }
+.flow-picker-thumb img { display: block; width: 100%; height: auto; }
+.flow-picker-thumb-placeholder { width: 100%; height: 60px; background: var(--border); }
+
+.flow-picker-check {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 16px;
+}
+
+.flow-builder-footer {
+  padding: 14px 20px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
