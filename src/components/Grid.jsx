@@ -1,3 +1,5 @@
+import FlowCard from "./FlowCard";
+
 export default function Grid({
   items,
   imageUrls,
@@ -6,6 +8,7 @@ export default function Grid({
   onCardClick,
   onCardContextMenu,
   onAddClick,
+  onAddFlowClick,
   isDragging,
 }) {
   return (
@@ -18,7 +21,8 @@ export default function Grid({
           value={search}
           onChange={(e) => onSearch(e.target.value)}
         />
-        <button className="btn-add" onClick={onAddClick}>+ Add</button>
+        <button className="btn-add" onClick={onAddClick}>+ Image</button>
+        <button className="btn-add" onClick={onAddFlowClick}>+ Flow</button>
       </header>
 
       {items.length === 0 ? (
@@ -30,19 +34,35 @@ export default function Grid({
       ) : (
         <div className={`grid${isDragging ? " drop-active" : ""}`}>
           {isDragging && <div className="grid-drop-overlay"><span>Drop to save</span></div>}
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="card"
-              onClick={() => onCardClick(item)}
-              onContextMenu={(e) => { e.preventDefault(); onCardContextMenu(e, item); }}
-              title={item.title || undefined}
-            >
-              {imageUrls[item.id]
-                ? <img src={imageUrls[item.id]} alt={item.title || "image"} loading="lazy" />
-                : <div className="card-placeholder" />}
-            </div>
-          ))}
+          {items.map((item) => {
+            if (item.type === "flow") {
+              const firstScreenUrl = item.screens?.[0]
+                ? imageUrls[item.screens[0].id]
+                : undefined;
+              return (
+                <FlowCard
+                  key={item.id}
+                  item={item}
+                  imageUrl={firstScreenUrl}
+                  onClick={() => onCardClick(item)}
+                  onContextMenu={onCardContextMenu}
+                />
+              );
+            }
+            return (
+              <div
+                key={item.id}
+                className="card"
+                onClick={() => onCardClick(item)}
+                onContextMenu={(e) => { e.preventDefault(); onCardContextMenu(e, item); }}
+                title={item.title || undefined}
+              >
+                {imageUrls[item.id]
+                  ? <img src={imageUrls[item.id]} alt={item.title || "image"} loading="lazy" />
+                  : <div className="card-placeholder" />}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
