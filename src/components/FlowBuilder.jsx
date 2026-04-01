@@ -24,10 +24,11 @@ export default function FlowBuilder({
   const [collectionId, setCollectionId] = useState(
     mode === "edit" ? (flow.collections[0] || "") : ""
   );
-  const [pickerOpen,  setPickerOpen]  = useState(false);
-  const [saving,      setSaving]      = useState(false);
-  const [dragIdx,     setDragIdx]     = useState(null);
-  const dragIdxRef = useRef(null); // ref so handlers always see latest value
+  const [pickerOpen,    setPickerOpen]    = useState(false);
+  const [saving,        setSaving]        = useState(false);
+  const [dragIdx,       setDragIdx]       = useState(null);  // which card is being dragged
+  const [dragOverIdx,   setDragOverIdx]   = useState(null);  // which card is the drop target
+  const dragSrcRef = useRef(null); // stable ref to source index
 
   // Track object URLs we create so we can revoke on unmount
   const ownedUrls = useRef([]);
@@ -78,18 +79,39 @@ export default function FlowBuilder({
   const removeScreen = (idx) =>
     setScreens((prev) => prev.filter((_, i) => i !== idx));
 
-  // Drag-to-reorder — use ref so handler always sees current drag position
+  // Drag-to-reorder — commit only on drop so DOM stays stable during drag
+  const handleDragStart = (idx) => {
+    dragSrcRef.current = idx;
+    setDragIdx(idx);
+  };
+
   const handleDragEnterScreen = (idx) => {
-    const from = dragIdxRef.current;
-    if (from === null || from === idx) return;
+    if (dragSrcRef.current === null || dragSrcRef.current === idx) return;
+    setDragOverIdx(idx);
+  };
+
+  const handleDropOnScreen = (e, idx) => {
+    e.preventDefault();
+    const from = dragSrcRef.current;
+    if (from === null || from === idx) {
+      setDragOverIdx(null);
+      return;
+    }
     setScreens((prev) => {
       const next = [...prev];
       const [moved] = next.splice(from, 1);
       next.splice(idx, 0, moved);
       return next;
     });
-    dragIdxRef.current = idx;
-    setDragIdx(idx);
+    dragSrcRef.current = null;
+    setDragIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const handleDragEnd = () => {
+    dragSrcRef.current = null;
+    setDragIdx(null);
+    setDragOverIdx(null);
   };
 
   const handleSave = async () => {
@@ -149,12 +171,13 @@ export default function FlowBuilder({
               {screens.map((screen, idx) => (
                 <div
                   key={screen.id}
-                  className={`flow-tray-thumb${dragIdx === idx ? " dragging" : ""}`}
+                  className={`flow-tray-thumb${dragIdx === idx ? " dragging" : ""}${dragOverIdx === idx && dragIdx !== idx ? " drag-over" : ""}`}
                   draggable
-                  onDragStart={() => { dragIdxRef.current = idx; setDragIdx(idx); }}
+                  onDragStart={() => handleDragStart(idx)}
                   onDragEnter={() => handleDragEnterScreen(idx)}
                   onDragOver={(e) => e.preventDefault()}
-                  onDragEnd={() => { dragIdxRef.current = null; setDragIdx(null); }}
+                  onDrop={(e) => handleDropOnScreen(e, idx)}
+                  onDragEnd={handleDragEnd}
                 >
                   {screen.previewUrl
                     ? <img src={screen.previewUrl} alt={`Screen ${idx + 1}`} />

@@ -1029,6 +1029,7 @@ html, body, #root { height: 100%; overflow: hidden; }
   transition: opacity 0.15s;
 }
 .flow-tray-thumb.dragging { opacity: 0.4; }
+.flow-tray-thumb.drag-over { outline: 2px solid var(--focus-border); outline-offset: 2px; }
 .flow-tray-thumb img {
   display: block;
   width: 100%;
