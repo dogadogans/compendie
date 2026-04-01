@@ -81,10 +81,69 @@ export async function deleteItem(id) {
   const data = await loadData();
   const item = data.items.find((i) => i.id === id);
   if (!item) throw new Error("Item not found");
-  try { await remove(item.image_path, { baseDir: BaseDirectory.Home }); }
-  catch (e) { console.warn("Could not remove image file:", e); }
+  if (item.type !== "flow") {
+    try { await remove(item.image_path, { baseDir: BaseDirectory.Home }); }
+    catch (e) { console.warn("Could not remove image file:", e); }
+  }
   data.items = data.items.filter((i) => i.id !== id);
   await saveData(data);
+}
+
+// Each screen: { id?: string, file?: File, image_path?: string, note?: string }
+// screens with `file` → save to disk; screens with `image_path` → use as-is
+export async function addFlow({ title, screens, tags, collections, note }) {
+  const data = await loadData();
+  const savedScreens = await Promise.all(
+    screens.map(async (s) => {
+      if (s.file) {
+        const bytes = new Uint8Array(await s.file.arrayBuffer());
+        const path  = await saveImage(bytes, s.file.name);
+        return { id: s.id || uuidv4(), image_path: path, note: s.note || "" };
+      }
+      return { id: s.id || uuidv4(), image_path: s.image_path, note: s.note || "" };
+    })
+  );
+  const item = {
+    id:          uuidv4(),
+    type:        "flow",
+    title:       title       || "",
+    screens:     savedScreens,
+    tags:        tags        || [],
+    collections: collections || [],
+    note:        note        || "",
+    created_at:  new Date().toISOString(),
+  };
+  data.items.unshift(item);
+  await saveData(data);
+  return item;
+}
+
+// Saves new screen Files to disk, keeps existing image_paths as-is.
+// Pass the full screens array — order is preserved.
+export async function updateFlow(id, { title, screens, tags, collections, note }) {
+  const data = await loadData();
+  const idx  = data.items.findIndex((i) => i.id === id);
+  if (idx === -1) throw new Error("Flow not found");
+  const savedScreens = await Promise.all(
+    screens.map(async (s) => {
+      if (s.file) {
+        const bytes = new Uint8Array(await s.file.arrayBuffer());
+        const path  = await saveImage(bytes, s.file.name);
+        return { id: s.id || uuidv4(), image_path: path, note: s.note || "" };
+      }
+      return { id: s.id || uuidv4(), image_path: s.image_path, note: s.note || "" };
+    })
+  );
+  data.items[idx] = {
+    ...data.items[idx],
+    ...(title       !== undefined && { title }),
+    ...(tags        !== undefined && { tags }),
+    ...(collections !== undefined && { collections }),
+    ...(note        !== undefined && { note }),
+    screens: savedScreens,
+  };
+  await saveData(data);
+  return data.items[idx];
 }
 
 export async function getImageUrl(imagePath) {
