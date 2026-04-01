@@ -12,6 +12,7 @@ import Sidebar from "./components/Sidebar";
 import Grid from "./components/Grid";
 import DetailPanel from "./components/DetailPanel";
 import FlowBuilder from "./components/FlowBuilder";
+import FlowDetail from "./components/FlowDetail";
 import "./App.css";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif"];
@@ -30,6 +31,8 @@ export default function App() {
   const [ctxMenu,      setCtxMenu]      = useState(null);
   // null | { mode: "create" } | { mode: "edit", flow: object }
   const [flowBuilder, setFlowBuilder] = useState(null);
+  // null | flow-item object
+  const [flowDetail, setFlowDetail] = useState(null);
   const [sidebarWidth, setSidebarWidth] = useState(
     () => parseInt(localStorage.getItem("tome_sidebar_width") || "240")
   );
@@ -136,7 +139,19 @@ export default function App() {
   const handleUpdateFlow = async (id, data) => {
     const updated = await updateFlow(id, data);
     setItems((prev) => prev.map((i) => (i.id === id ? updated : i)));
+    setFlowDetail((prev) => (prev?.id === id ? updated : prev));
     setFlowBuilder(null);
+  };
+
+  const handleUpdateScreenNote = async (flowId, screenId, note) => {
+    const flow = items.find((i) => i.id === flowId);
+    if (!flow) return;
+    const updatedScreens = flow.screens.map((s) =>
+      s.id === screenId ? { ...s, note } : s
+    );
+    const updated = await updateFlow(flowId, { screens: updatedScreens });
+    setItems((prev) => prev.map((i) => (i.id === flowId ? updated : i)));
+    setFlowDetail(updated);
   };
 
   const handleDelete = async (id) => {
@@ -239,9 +254,17 @@ export default function App() {
     ]);
   };
 
+  const handleCardClick = (item) => {
+    if (item.type === "flow") setFlowDetail(item);
+    else setSelectedItem(item);
+  };
+
   const handleCardContextMenu = (e, item) => {
     openCtxMenu(e, [
-      { icon: "↗", label: "Open details", action: () => setSelectedItem(item) },
+      {
+        icon: "↗", label: "Open details",
+        action: () => item.type === "flow" ? setFlowDetail(item) : setSelectedItem(item),
+      },
       "---",
       {
         icon: "⤷", label: "Add to collection", action: () => {
@@ -323,7 +346,7 @@ export default function App() {
           imageUrls={imageUrls}
           search={search}
           onSearch={setSearch}
-          onCardClick={setSelectedItem}
+          onCardClick={handleCardClick}
           onCardContextMenu={handleCardContextMenu}
           onAddClick={() => fileInputRef.current?.click()}
           onAddFlowClick={() => setFlowBuilder({ mode: "create" })}
@@ -373,6 +396,16 @@ export default function App() {
           onSave={handleSaveFlow}
           onUpdate={handleUpdateFlow}
           onCancel={() => setFlowBuilder(null)}
+        />
+      )}
+
+      {flowDetail && !flowBuilder && (
+        <FlowDetail
+          flow={flowDetail}
+          imageUrls={imageUrls}
+          onClose={() => setFlowDetail(null)}
+          onEdit={() => setFlowBuilder({ mode: "edit", flow: flowDetail })}
+          onUpdateScreenNote={handleUpdateScreenNote}
         />
       )}
 
