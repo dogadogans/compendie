@@ -4,12 +4,14 @@ import { readFile } from "@tauri-apps/plugin-fs";
 import {
   loadItems, addItem, updateItem, deleteItem, getImageUrl,
   loadCollections, addCollection, updateCollection, deleteCollection, archiveCollection,
+  addFlow, updateFlow,
 } from "./store";
 import AddOverlay from "./components/AddOverlay";
 import ContextMenu from "./components/ContextMenu";
 import Sidebar from "./components/Sidebar";
 import Grid from "./components/Grid";
 import DetailPanel from "./components/DetailPanel";
+import FlowBuilder from "./components/FlowBuilder";
 import "./App.css";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif"];
@@ -26,6 +28,8 @@ export default function App() {
   const [pendingFile,  setPendingFile]  = useState(null);
   const [isDragging,   setIsDragging]   = useState(false);
   const [ctxMenu,      setCtxMenu]      = useState(null);
+  // null | { mode: "create" } | { mode: "edit", flow: object }
+  const [flowBuilder, setFlowBuilder] = useState(null);
   const [sidebarWidth, setSidebarWidth] = useState(
     () => parseInt(localStorage.getItem("tome_sidebar_width") || "240")
   );
@@ -118,6 +122,21 @@ export default function App() {
     const updated = await updateItem(id, changes);
     setItems((prev) => prev.map((i) => (i.id === id ? updated : i)));
     setSelectedItem((prev) => (prev?.id === id ? updated : prev));
+  };
+
+  const handleSaveFlow = async (data) => {
+    const collectionIds = data.collections.length
+      ? data.collections
+      : activeView.type === "collection" ? [activeView.id] : [];
+    const item = await addFlow({ ...data, collections: collectionIds });
+    setItems((prev) => [item, ...prev]);
+    setFlowBuilder(null);
+  };
+
+  const handleUpdateFlow = async (id, data) => {
+    const updated = await updateFlow(id, data);
+    setItems((prev) => prev.map((i) => (i.id === id ? updated : i)));
+    setFlowBuilder(null);
   };
 
   const handleDelete = async (id) => {
@@ -307,6 +326,7 @@ export default function App() {
           onCardClick={setSelectedItem}
           onCardContextMenu={handleCardContextMenu}
           onAddClick={() => fileInputRef.current?.click()}
+          onAddFlowClick={() => setFlowBuilder({ mode: "create" })}
           isDragging={isDragging}
         />
         <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }}
@@ -340,6 +360,19 @@ export default function App() {
           collections={collections.filter((c) => !c.archived)}
           onSave={handleSaveNew}
           onCancel={() => setPendingFile(null)}
+        />
+      )}
+
+      {flowBuilder && (
+        <FlowBuilder
+          mode={flowBuilder.mode}
+          flow={flowBuilder.flow}
+          items={items}
+          imageUrls={imageUrls}
+          collections={collections.filter((c) => !c.archived)}
+          onSave={handleSaveFlow}
+          onUpdate={handleUpdateFlow}
+          onCancel={() => setFlowBuilder(null)}
         />
       )}
 
