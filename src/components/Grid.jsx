@@ -68,6 +68,17 @@ export default function Grid({
 
     const onMouseUp = () => {
       if (rbOverlay.current) rbOverlay.current.style.display = "none";
+      if (rbActive) {
+        // Suppress the click that fires after mouseup on a card.
+        // We check rbActive *before* resetting it. The capture-phase listener
+        // runs before React's synthetic event system, so stopPropagation here
+        // prevents the card's onClick from ever firing. Self-removes after one use.
+        const suppressClick = (ev) => {
+          ev.stopPropagation();
+          window.removeEventListener("click", suppressClick, true);
+        };
+        window.addEventListener("click", suppressClick, true);
+      }
       rbActive = false;
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup",   onMouseUp);
