@@ -118,7 +118,11 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (e) => {
-      if (e.key === "Escape") setSelectedIds(new Set());
+      if (e.key !== "Escape") return;
+      // Don't clear selection if the user is typing in an input or textarea
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      setSelectedIds(new Set());
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -137,11 +141,11 @@ export default function App() {
     setPendingFile(null);
   };
 
-  const handleUpdate = async (id, changes) => {
+  const handleUpdate = useCallback(async (id, changes) => {
     const updated = await updateItem(id, changes);
     setItems((prev) => prev.map((i) => (i.id === id ? updated : i)));
     setSelectedItem((prev) => (prev?.id === id ? updated : prev));
-  };
+  }, []);
 
   const handleSaveFlow = async (data) => {
     const collectionIds = data.collections.length
