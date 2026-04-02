@@ -145,8 +145,8 @@ export default function App() {
 
   // Save all pending files as a single flow
   const handleSaveNewFlow = async (data) => {
-    const collectionIds = data.collectionId
-      ? [data.collectionId]
+    const collectionIds = data.collections?.length
+      ? data.collections
       : activeView.type === "collection" ? [activeView.id] : [];
     const item = await addFlow({ ...data, collections: collectionIds });
     setItems((prev) => [item, ...prev]);
