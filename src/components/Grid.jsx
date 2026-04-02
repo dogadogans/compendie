@@ -90,6 +90,7 @@ export default function Grid({
       // If mousedown on a selected card → start drag (Task 3)
       const cardEl = e.target.closest("[data-item-id]");
       if (cardEl && selectedIdsRef.current.has(cardEl.dataset.itemId)) {
+        e.preventDefault(); // prevent browser native image drag stealing mouse events
         onSelectionDragStart();
         return;
       }

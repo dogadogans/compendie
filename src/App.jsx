@@ -42,9 +42,8 @@ export default function App() {
   const [panelWidth,   setPanelWidth]   = useState(
     () => parseInt(localStorage.getItem("tome_panel_width")   || "320")
   );
-  const [dragOverCollectionId, setDragOverCollectionId] = useState(null);
   const ghostRef    = useRef(null);  // direct DOM ref — updated without React re-renders
-  const dragColRef  = useRef(null);  // mirrors dragOverCollectionId for use in mouseup closure
+  const dragColRef  = useRef(null);  // current hovered collection id during drag
   const itemsRef    = useRef(items); // always-current items for use in stable callbacks
   useEffect(() => { itemsRef.current = items; }, [items]);
   const dragCounter = useRef(0);
@@ -316,27 +315,37 @@ export default function App() {
   };
 
   const handleSelectionDragStart = useCallback(() => {
-    // Show ghost — update DOM directly to avoid re-renders on every mousemove
+    // Show ghost — DOM-only, no React state
     if (ghostRef.current) {
       ghostRef.current.textContent = `+${selectedIdsRef.current.size}`;
       ghostRef.current.style.display = "block";
     }
 
+    let prevColEl = null; // sidebar element currently highlighted
+
     const onMove = (e) => {
+      // Move ghost — no setState, no re-render
       if (ghostRef.current) {
         ghostRef.current.style.left = `${e.clientX + 12}px`;
         ghostRef.current.style.top  = `${e.clientY + 12}px`;
       }
 
+      // Highlight sidebar target — direct DOM class toggle, no setState
       const el    = document.elementFromPoint(e.clientX, e.clientY);
-      const colEl = el?.closest("[data-collection-id]");
-      const colId = colEl?.dataset?.collectionId ?? null;
-      dragColRef.current = colId;
-      setDragOverCollectionId(colId);
+      const colEl = el?.closest("[data-collection-id]") ?? null;
+      if (colEl !== prevColEl) {
+        prevColEl?.classList.remove("drag-target");
+        colEl?.classList.add("drag-target");
+        prevColEl = colEl;
+      }
+      dragColRef.current = colEl?.dataset?.collectionId ?? null;
     };
 
     const onUp = () => {
       if (ghostRef.current) ghostRef.current.style.display = "none";
+      prevColEl?.classList.remove("drag-target");
+      prevColEl = null;
+
       const colId = dragColRef.current;
       if (colId) {
         selectedIdsRef.current.forEach((id) => {
@@ -348,7 +357,6 @@ export default function App() {
         });
       }
       setSelectedIds(new Set());
-      setDragOverCollectionId(null);
       dragColRef.current = null;
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup",   onUp);
@@ -356,7 +364,7 @@ export default function App() {
 
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup",   onUp);
-  }, [handleUpdate]); // stable: items read via refs, no state reads in hot path
+  }, [handleUpdate]); // zero React state reads in hot path
 
   // ── Filtering ────────────────────────────────────────────────────────────────
 
@@ -392,7 +400,7 @@ export default function App() {
         collections={collections}
         items={items}
         activeView={activeView}
-        dragOverCollectionId={dragOverCollectionId}
+
         onSelectAll={() => setActiveView({ type: "all" })}
         onSelectUnorganized={() => setActiveView({ type: "unorganized" })}
         onSelectCollection={(id) => setActiveView({ type: "collection", id })}

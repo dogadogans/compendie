@@ -4,7 +4,6 @@ export default function Sidebar({
   collections,
   items,
   activeView,
-  dragOverCollectionId,
   onSelectAll,
   onSelectUnorganized,
   onSelectCollection,
@@ -65,13 +64,11 @@ export default function Sidebar({
     const hasKids      = children.length > 0;
     const isExpanded   = expandedIds.has(col.id);
     const isActive     = activeView.type === "collection" && activeView.id === col.id;
-    const isDragTarget = dragOverCollectionId === col.id;
-
     return (
       <div key={col.id}>
         <div
           data-collection-id={col.id}
-          className={`nav-item collection-item${isActive ? " active" : ""}${isChild ? " sub-item" : ""}${isDragTarget ? " drag-target" : ""}`}
+          className={`nav-item collection-item${isActive ? " active" : ""}${isChild ? " sub-item" : ""}`}
           onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, col, () => startRename(col)); }}
         >
           {!isChild && (
@@ -213,7 +210,7 @@ export default function Sidebar({
               <div
                 key={col.id}
                 data-collection-id={col.id}
-                className={`nav-item collection-item muted${activeView.type === "collection" && activeView.id === col.id ? " active" : ""}${dragOverCollectionId === col.id ? " drag-target" : ""}`}
+                className={`nav-item collection-item muted${activeView.type === "collection" && activeView.id === col.id ? " active" : ""}`}
                 onClick={() => onSelectCollection(col.id)}
                 onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, col, () => startRename(col)); }}
               >
