@@ -172,7 +172,7 @@ export default function AddOverlay({ imageFiles, collections, onSave, onSaveFlow
                     <button
                       key={c.id}
                       type="button"
-                      className={`collection-pill${flowCollections.includes(c.id) ? " active" : ""}`}
+                      className={`add-collection-pill${flowCollections.includes(c.id) ? " active" : ""}`}
                       onClick={() => toggleFlowCollection(c.id)}
                     >
                       {c.icon} {c.name}
