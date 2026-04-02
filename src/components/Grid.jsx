@@ -7,12 +7,14 @@ export default function Grid({
   search,
   onSearch,
   activeView,
+  selectedIds,
+  onSelectionChange,
+  onSelectionDragStart,
   onCardClick,
   onCardContextMenu,
   onAddClick,
   onAddFlowClick,
   isDragging,
-  // (selectedIds, onSelectionChange, onSelectionDragStart added in Task 2)
 }) {
   const [activeTab, setActiveTab] = useState("images");
 
@@ -20,6 +22,90 @@ export default function Grid({
   useEffect(() => {
     setActiveTab("images");
   }, [activeView]);
+
+  const gridRef    = useRef(null);  // attached to the grid-area div
+  const rbOverlay  = useRef(null);  // the rubber band rectangle div
+  const selectedIdsRef = useRef(selectedIds);
+  useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
+
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+
+    let rbStartX = 0, rbStartY = 0, rbActive = false;
+
+    const onMouseMove = (e) => {
+      const dx = e.clientX - rbStartX;
+      const dy = e.clientY - rbStartY;
+      if (!rbActive && Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+      rbActive = true;
+
+      const left = Math.min(e.clientX, rbStartX);
+      const top  = Math.min(e.clientY, rbStartY);
+      const w    = Math.abs(dx);
+      const h    = Math.abs(dy);
+
+      if (rbOverlay.current) {
+        rbOverlay.current.style.display = "block";
+        rbOverlay.current.style.left    = `${left}px`;
+        rbOverlay.current.style.top     = `${top}px`;
+        rbOverlay.current.style.width   = `${w}px`;
+        rbOverlay.current.style.height  = `${h}px`;
+      }
+
+      const rbRect = { left, top, right: left + w, bottom: top + h };
+      const cards  = grid.querySelectorAll("[data-item-id]");
+      const hits   = new Set();
+      cards.forEach((card) => {
+        const r = card.getBoundingClientRect();
+        if (r.left < rbRect.right && r.right > rbRect.left &&
+            r.top  < rbRect.bottom && r.bottom > rbRect.top) {
+          hits.add(card.dataset.itemId);
+        }
+      });
+      onSelectionChange(hits);
+    };
+
+    const onMouseUp = () => {
+      if (rbOverlay.current) rbOverlay.current.style.display = "none";
+      rbActive = false;
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup",   onMouseUp);
+    };
+
+    const onMouseDown = (e) => {
+      if (e.button !== 0) return;
+
+      // If mousedown on a selected card → start drag (Task 3)
+      const cardEl = e.target.closest("[data-item-id]");
+      if (cardEl && selectedIdsRef.current.has(cardEl.dataset.itemId)) {
+        onSelectionDragStart();
+        return;
+      }
+
+      // If mousedown on any card → normal click, just clear selection
+      if (cardEl) {
+        onSelectionChange(new Set());
+        return;
+      }
+
+      // Background mousedown → start rubber band
+      rbStartX  = e.clientX;
+      rbStartY  = e.clientY;
+      rbActive  = false;
+      onSelectionChange(new Set());
+
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup",   onMouseUp);
+    };
+
+    grid.addEventListener("mousedown", onMouseDown);
+    return () => {
+      grid.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup",   onMouseUp);
+    };
+  }, [onSelectionChange, onSelectionDragStart]);
 
   const inCollection = activeView?.type === "collection";
   const imageItems = inCollection ? items.filter(i => i.type === "image") : items;
@@ -29,7 +115,8 @@ export default function Grid({
     : items;
 
   return (
-    <div className="grid-area">
+    <div className="grid-area" ref={gridRef}>
+      <div ref={rbOverlay} className="rubber-band" style={{ display: "none" }} />
       <header className="toolbar">
         <input
           className="search-input"
@@ -100,6 +187,7 @@ export default function Grid({
                   key={item.id}
                   item={item}
                   imageUrl={firstScreenUrl}
+                  selected={selectedIds?.has(item.id)}
                   onClick={() => onCardClick(item)}
                   onContextMenu={onCardContextMenu}
                 />
@@ -108,7 +196,8 @@ export default function Grid({
             return (
               <div
                 key={item.id}
-                className="card"
+                data-item-id={item.id}
+                className={`card${selectedIds?.has(item.id) ? " selected" : ""}`}
                 onClick={() => onCardClick(item)}
                 onContextMenu={(e) => { e.preventDefault(); onCardContextMenu(e, item); }}
                 title={item.title || undefined}

@@ -29,6 +29,9 @@ export default function App() {
   const [pendingFile,  setPendingFile]  = useState(null);
   const [isDragging,   setIsDragging]   = useState(false);
   const [ctxMenu,      setCtxMenu]      = useState(null);
+  const [selectedIds,        setSelectedIds]        = useState(new Set());
+  const selectedIdsRef = useRef(new Set());
+  useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
   // null | { mode: "create" } | { mode: "edit", flow: object }
   const [flowBuilder, setFlowBuilder] = useState(null);
   // null | flow-item object
@@ -106,6 +109,14 @@ export default function App() {
       });
     })();
     return () => { unlistenHover?.(); unlistenDrop?.(); unlistenLeave?.(); };
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setSelectedIds(new Set());
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   const handleDragEnter = useCallback((e) => { e.preventDefault(); }, []);
@@ -295,6 +306,10 @@ export default function App() {
     ]);
   };
 
+  const handleSelectionDragStart = useCallback(() => {
+    // wired in Task 3
+  }, []);
+
   // ── Filtering ────────────────────────────────────────────────────────────────
 
   const getDescendantIds = useCallback((id) => {
@@ -347,6 +362,9 @@ export default function App() {
           search={search}
           onSearch={setSearch}
           activeView={activeView}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          onSelectionDragStart={handleSelectionDragStart}
           onCardClick={handleCardClick}
           onCardContextMenu={handleCardContextMenu}
           onAddClick={() => fileInputRef.current?.click()}

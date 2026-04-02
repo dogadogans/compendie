@@ -1,8 +1,9 @@
-export default function FlowCard({ item, imageUrl, onClick, onContextMenu }) {
+export default function FlowCard({ item, imageUrl, onClick, onContextMenu, selected }) {
   const count = item.screens?.length ?? 0;
   return (
     <div
-      className="flow-card"
+      data-item-id={item.id}
+      className={`flow-card${selected ? " selected" : ""}`}
       onClick={onClick}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, item); }}
       title={item.title || undefined}

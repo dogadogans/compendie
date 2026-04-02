@@ -1388,3 +1388,19 @@ html, body, #root { height: 100%; overflow: hidden; }
   height: 100%;
   object-fit: cover;
 }
+
+/* ── Rubber band selection ───────────────────────────────────────────────── */
+.rubber-band {
+  position: fixed;
+  pointer-events: none;
+  z-index: 500;
+  border: 1.5px solid var(--accent);
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 3px;
+}
+
+.card.selected,
+.flow-card.selected .flow-card-face {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
