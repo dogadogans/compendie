@@ -42,6 +42,11 @@ export default function App() {
   const [panelWidth,   setPanelWidth]   = useState(
     () => parseInt(localStorage.getItem("tome_panel_width")   || "320")
   );
+  const [ghostPos,             setGhostPos]             = useState(null); // { x, y } | null
+  const [dragOverCollectionId, setDragOverCollectionId] = useState(null);
+  const dragColRef  = useRef(null);  // mirrors dragOverCollectionId for use in mouseup closure
+  const itemsRef    = useRef(items); // always-current items for use in stable callbacks
+  useEffect(() => { itemsRef.current = items; }, [items]);
   const dragCounter = useRef(0);
   const fileInputRef = useRef(null);
   const loadedIds = useRef(new Set());
@@ -307,8 +312,38 @@ export default function App() {
   };
 
   const handleSelectionDragStart = useCallback(() => {
-    // wired in Task 3
-  }, []);
+    const onMove = (e) => {
+      setGhostPos({ x: e.clientX, y: e.clientY });
+
+      const el    = document.elementFromPoint(e.clientX, e.clientY);
+      const colEl = el?.closest("[data-collection-id]");
+      const colId = colEl?.dataset?.collectionId ?? null;
+      dragColRef.current = colId;
+      setDragOverCollectionId(colId);
+    };
+
+    const onUp = () => {
+      const colId = dragColRef.current;
+      if (colId) {
+        selectedIdsRef.current.forEach((id) => {
+          const item = itemsRef.current.find((i) => i.id === id);
+          if (!item) return;
+          if (!item.collections.includes(colId)) {
+            handleUpdate(id, { collections: [...item.collections, colId] });
+          }
+        });
+      }
+      setSelectedIds(new Set());
+      setDragOverCollectionId(null);
+      dragColRef.current = null;
+      setGhostPos(null);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup",   onUp);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup",   onUp);
+  }, [handleUpdate]); // stable: items read via itemsRef, selectedIds via selectedIdsRef
 
   // ── Filtering ────────────────────────────────────────────────────────────────
 
@@ -344,6 +379,7 @@ export default function App() {
         collections={collections}
         items={items}
         activeView={activeView}
+        dragOverCollectionId={dragOverCollectionId}
         onSelectAll={() => setActiveView({ type: "all" })}
         onSelectUnorganized={() => setActiveView({ type: "unorganized" })}
         onSelectCollection={(id) => setActiveView({ type: "collection", id })}
@@ -390,6 +426,15 @@ export default function App() {
           />
         )}
       </div>
+
+      {ghostPos && (
+        <div
+          className="drag-ghost"
+          style={{ left: ghostPos.x + 12, top: ghostPos.y + 12 }}
+        >
+          +{selectedIds.size}
+        </div>
+      )}
 
       {ctxMenu && (
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.menuItems}

@@ -4,6 +4,7 @@ export default function Sidebar({
   collections,
   items,
   activeView,
+  dragOverCollectionId,
   onSelectAll,
   onSelectUnorganized,
   onSelectCollection,
@@ -60,15 +61,17 @@ export default function Sidebar({
     });
 
   const renderCollection = (col, isChild = false) => {
-    const children   = isChild ? [] : getChildren(col.id);
-    const hasKids    = children.length > 0;
-    const isExpanded = expandedIds.has(col.id);
-    const isActive   = activeView.type === "collection" && activeView.id === col.id;
+    const children     = isChild ? [] : getChildren(col.id);
+    const hasKids      = children.length > 0;
+    const isExpanded   = expandedIds.has(col.id);
+    const isActive     = activeView.type === "collection" && activeView.id === col.id;
+    const isDragTarget = dragOverCollectionId === col.id;
 
     return (
       <div key={col.id}>
         <div
-          className={`nav-item collection-item${isActive ? " active" : ""}${isChild ? " sub-item" : ""}`}
+          data-collection-id={col.id}
+          className={`nav-item collection-item${isActive ? " active" : ""}${isChild ? " sub-item" : ""}${isDragTarget ? " drag-target" : ""}`}
           onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, col, () => startRename(col)); }}
         >
           {!isChild && (
@@ -209,7 +212,8 @@ export default function Sidebar({
             {archivedExpanded && archived.map((col) => (
               <div
                 key={col.id}
-                className={`nav-item collection-item muted${activeView.type === "collection" && activeView.id === col.id ? " active" : ""}`}
+                data-collection-id={col.id}
+                className={`nav-item collection-item muted${activeView.type === "collection" && activeView.id === col.id ? " active" : ""}${dragOverCollectionId === col.id ? " drag-target" : ""}`}
                 onClick={() => onSelectCollection(col.id)}
                 onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, col, () => startRename(col)); }}
               >
