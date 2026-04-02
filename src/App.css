@@ -1028,8 +1028,25 @@ html, body, #root { height: 100%; overflow: hidden; }
   background: var(--bg);
   transition: opacity 0.15s;
 }
-.flow-tray-thumb.dragging { opacity: 0.4; }
-.flow-tray-thumb.drag-over { outline: 2px solid var(--focus-border); outline-offset: 2px; }
+.flow-tray-thumb.dragging {
+  opacity: 0.25;
+  transform: scale(0.9);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+  transition: opacity 0.1s, transform 0.1s;
+}
+.flow-insert-line {
+  width: 3px;
+  flex-shrink: 0;
+  align-self: stretch;
+  min-height: 60px;
+  background: var(--blue-500);
+  border-radius: 2px;
+  animation: insertLinePop 0.1s ease;
+}
+@keyframes insertLinePop {
+  from { opacity: 0; transform: scaleY(0.6); }
+  to   { opacity: 1; transform: scaleY(1); }
+}
 .flow-tray-thumb img {
   display: block;
   width: 100%;
@@ -1304,4 +1321,69 @@ html, body, #root { height: 100%; overflow: hidden; }
   color: rgba(255, 255, 255, 0.5);
   min-width: 32px;
   text-align: center;
+}
+
+/* ── Collection tabs ─────────────────────────────────────────────────────── */
+.collection-tabs {
+  display: flex;
+  gap: 2px;
+  margin-right: auto;
+}
+.tab-btn {
+  all: unset;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  color: var(--muted);
+  transition: color 0.1s, background 0.1s;
+}
+.tab-btn:hover  { color: var(--text); background: var(--accent-bg); }
+.tab-btn.active { color: var(--text); font-weight: 500; border-bottom: 2px solid var(--accent); border-radius: 0; }
+
+/* ── Flows tab layout ────────────────────────────────────────────────────── */
+.flows-tab-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 20px;
+  overflow-y: auto;
+}
+.flow-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.flow-row-title {
+  min-width: 120px;
+  max-width: 120px;
+  font-size: 13px;
+  font-weight: 500;
+  padding-top: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.flow-row-screens {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  flex: 1;
+  padding-bottom: 4px;
+}
+.flow-row-screen {
+  flex-shrink: 0;
+  width: 160px;
+  height: 100px;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--grey-100);
+}
+.flow-row-screen:hover { opacity: 0.85; }
+.flow-row-screen img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }

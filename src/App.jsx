@@ -346,6 +346,7 @@ export default function App() {
           imageUrls={imageUrls}
           search={search}
           onSearch={setSearch}
+          activeView={activeView}
           onCardClick={handleCardClick}
           onCardContextMenu={handleCardContextMenu}
           onAddClick={() => fileInputRef.current?.click()}
