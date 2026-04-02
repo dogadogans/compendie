@@ -1,55 +1,92 @@
 import { useState, useEffect } from "react";
 
-export default function AddOverlay({ imageFile, collections, onSave, onCancel }) {
+export default function AddOverlay({ imageFiles, collections, onSave, onSaveFlow, onCancel }) {
+  const [mode,         setMode]         = useState("image"); // "image" | "flow"
   const [title,        setTitle]        = useState("");
   const [tagInput,     setTagInput]     = useState("");
   const [note,         setNote]         = useState("");
   const [collectionId, setCollectionId] = useState("");
-  const [previewUrl,   setPreviewUrl]   = useState(null);
+  const [previewUrls,  setPreviewUrls]  = useState([]);
   const [saving,       setSaving]       = useState(false);
 
   useEffect(() => {
-    if (!imageFile) return;
-    const url = URL.createObjectURL(imageFile);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [imageFile]);
+    const urls = imageFiles.map((f) => URL.createObjectURL(f));
+    setPreviewUrls(urls);
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [imageFiles]);
 
   const handleSave = async () => {
-    if (!imageFile) return;
     setSaving(true);
     try {
-      const bytes = new Uint8Array(await imageFile.arrayBuffer());
-      const tags  = tagInput.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
-      await onSave({
-        imageBytes:   bytes,
-        originalName: imageFile.name,
-        title,
-        tags,
-        note,
-        collectionId: collectionId || null,
-      });
+      const tags = tagInput.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+      if (mode === "flow") {
+        const screens = await Promise.all(
+          imageFiles.map(async (f) => ({ file: f }))
+        );
+        await onSaveFlow({ title, screens, tags, note, collectionId: collectionId || null });
+      } else {
+        const dataList = await Promise.all(
+          imageFiles.map(async (f) => ({
+            imageBytes:   new Uint8Array(await f.arrayBuffer()),
+            originalName: f.name,
+            title,
+            tags,
+            note,
+            collectionId: collectionId || null,
+          }))
+        );
+        await onSave(dataList);
+      }
     } finally {
       setSaving(false);
     }
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSave(); }
+    if (e.key === "Enter" && !e.shiftKey && e.target.tagName !== "TEXTAREA") {
+      e.preventDefault();
+      handleSave();
+    }
     if (e.key === "Escape") onCancel();
   };
+
+  const multi = imageFiles.length > 1;
 
   return (
     <div className="overlay" onKeyDown={handleKeyDown}>
       <div className="overlay-backdrop" onClick={onCancel} />
       <div className="add-panel">
-        {previewUrl && (
-          <div className="add-preview"><img src={previewUrl} alt="preview" /></div>
-        )}
+        {/* Thumbnail strip */}
+        <div className={`add-previews${multi ? " multi" : ""}`}>
+          {previewUrls.map((url, i) => (
+            <div key={i} className="add-preview-thumb">
+              <img src={url} alt="" />
+            </div>
+          ))}
+        </div>
+
         <div className="add-fields">
+          {/* Image / Flow toggle — only show when more than one image */}
+          {multi && (
+            <div className="add-mode-toggle">
+              <button
+                className={`mode-btn${mode === "image" ? " active" : ""}`}
+                onClick={() => setMode("image")}
+              >
+                Images
+              </button>
+              <button
+                className={`mode-btn${mode === "flow" ? " active" : ""}`}
+                onClick={() => setMode("flow")}
+              >
+                Flow
+              </button>
+            </div>
+          )}
+
           <input
             className="field-input"
-            placeholder="Title (optional)"
+            placeholder={mode === "flow" ? "Flow name (optional)" : "Title (optional)"}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             autoFocus
@@ -82,7 +119,7 @@ export default function AddOverlay({ imageFile, collections, onSave, onCancel })
           <div className="add-actions">
             <button className="btn-ghost" onClick={onCancel} disabled={saving}>Cancel</button>
             <button className="btn-primary" onClick={handleSave} disabled={saving}>
-              {saving ? "Saving…" : "Save"}
+              {saving ? "Saving…" : mode === "flow" ? "Save as Flow" : multi ? `Save ${imageFiles.length} Images` : "Save"}
             </button>
           </div>
         </div>

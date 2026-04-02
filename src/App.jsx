@@ -26,7 +26,7 @@ export default function App() {
   const [search,       setSearch]       = useState("");
   const [activeView,   setActiveView]   = useState({ type: "all" });
   const [selectedItem, setSelectedItem] = useState(null);
-  const [pendingFile,  setPendingFile]  = useState(null);
+  const [pendingFiles, setPendingFiles] = useState([]);
   const [isDragging,   setIsDragging]   = useState(false);
   const [ctxMenu,      setCtxMenu]      = useState(null);
   const [selectedIds,        setSelectedIds]        = useState(new Set());
@@ -87,7 +87,7 @@ export default function App() {
   useEffect(() => {
     const onPaste = (e) => {
       const file = e.clipboardData?.files?.[0];
-      if (file?.type.startsWith("image/")) setPendingFile(file);
+      if (file?.type.startsWith("image/")) setPendingFiles((prev) => [...prev, file]);
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
@@ -108,7 +108,7 @@ export default function App() {
           const ext = imagePath.split(".").pop().toLowerCase();
           const filename = imagePath.replace(/\\/g, "/").split("/").pop();
           const blob = new Blob([bytes], { type: MIME[ext] || "image/png" });
-          setPendingFile(new File([blob], filename, { type: blob.type }));
+          setPendingFiles((prev) => [...prev, new File([blob], filename, { type: blob.type })]);
         } catch (e) { console.error("Failed to read dragged file:", e); }
       });
     })();
@@ -131,13 +131,26 @@ export default function App() {
   const handleDragOver  = useCallback((e) => { e.preventDefault(); }, []);
   const handleDragLeave = useCallback((e) => { e.preventDefault(); }, []);
 
-  const handleSaveNew = async (data) => {
+  // Save all pending files as separate images
+  const handleSaveNew = async (dataList) => {
+    const collectionIds = dataList[0]?.collectionId
+      ? [dataList[0].collectionId]
+      : activeView.type === "collection" ? [activeView.id] : [];
+    const saved = await Promise.all(
+      dataList.map((data) => addItem({ ...data, collections: collectionIds }))
+    );
+    setItems((prev) => [...saved.reverse(), ...prev]);
+    setPendingFiles([]);
+  };
+
+  // Save all pending files as a single flow
+  const handleSaveNewFlow = async (data) => {
     const collectionIds = data.collectionId
       ? [data.collectionId]
       : activeView.type === "collection" ? [activeView.id] : [];
-    const item = await addItem({ ...data, collections: collectionIds });
+    const item = await addFlow({ ...data, collections: collectionIds });
     setItems((prev) => [item, ...prev]);
-    setPendingFile(null);
+    setPendingFiles([]);
   };
 
   const handleUpdate = useCallback(async (id, changes) => {
@@ -428,13 +441,13 @@ export default function App() {
           onAddFlowClick={() => setFlowBuilder({ mode: "create" })}
           isDragging={isDragging}
         />
-        <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }}
+        <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: "none" }}
           onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) setPendingFile(file);
+            const files = Array.from(e.target.files || []);
+            if (files.length) setPendingFiles((prev) => [...prev, ...files]);
             e.target.value = "";
           }} />
-        {selectedItem && !pendingFile && (
+        {selectedItem && pendingFiles.length === 0 && (
           <DetailPanel
             item={selectedItem}
             imageUrl={imageUrls[selectedItem.id]}
@@ -455,12 +468,13 @@ export default function App() {
           onClose={() => setCtxMenu(null)} />
       )}
 
-      {pendingFile && (
+      {pendingFiles.length > 0 && (
         <AddOverlay
-          imageFile={pendingFile}
+          imageFiles={pendingFiles}
           collections={collections.filter((c) => !c.archived)}
           onSave={handleSaveNew}
-          onCancel={() => setPendingFile(null)}
+          onSaveFlow={handleSaveNewFlow}
+          onCancel={() => setPendingFiles([])}
         />
       )}
 
