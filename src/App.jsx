@@ -42,8 +42,8 @@ export default function App() {
   const [panelWidth,   setPanelWidth]   = useState(
     () => parseInt(localStorage.getItem("tome_panel_width")   || "320")
   );
-  const [ghostPos,             setGhostPos]             = useState(null); // { x, y } | null
   const [dragOverCollectionId, setDragOverCollectionId] = useState(null);
+  const ghostRef    = useRef(null);  // direct DOM ref — updated without React re-renders
   const dragColRef  = useRef(null);  // mirrors dragOverCollectionId for use in mouseup closure
   const itemsRef    = useRef(items); // always-current items for use in stable callbacks
   useEffect(() => { itemsRef.current = items; }, [items]);
@@ -316,8 +316,17 @@ export default function App() {
   };
 
   const handleSelectionDragStart = useCallback(() => {
+    // Show ghost — update DOM directly to avoid re-renders on every mousemove
+    if (ghostRef.current) {
+      ghostRef.current.textContent = `+${selectedIdsRef.current.size}`;
+      ghostRef.current.style.display = "block";
+    }
+
     const onMove = (e) => {
-      setGhostPos({ x: e.clientX, y: e.clientY });
+      if (ghostRef.current) {
+        ghostRef.current.style.left = `${e.clientX + 12}px`;
+        ghostRef.current.style.top  = `${e.clientY + 12}px`;
+      }
 
       const el    = document.elementFromPoint(e.clientX, e.clientY);
       const colEl = el?.closest("[data-collection-id]");
@@ -327,6 +336,7 @@ export default function App() {
     };
 
     const onUp = () => {
+      if (ghostRef.current) ghostRef.current.style.display = "none";
       const colId = dragColRef.current;
       if (colId) {
         selectedIdsRef.current.forEach((id) => {
@@ -340,14 +350,13 @@ export default function App() {
       setSelectedIds(new Set());
       setDragOverCollectionId(null);
       dragColRef.current = null;
-      setGhostPos(null);
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup",   onUp);
     };
 
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup",   onUp);
-  }, [handleUpdate]); // stable: items read via itemsRef, selectedIds via selectedIdsRef
+  }, [handleUpdate]); // stable: items read via refs, no state reads in hot path
 
   // ── Filtering ────────────────────────────────────────────────────────────────
 
@@ -431,14 +440,7 @@ export default function App() {
         )}
       </div>
 
-      {ghostPos && (
-        <div
-          className="drag-ghost"
-          style={{ left: ghostPos.x + 12, top: ghostPos.y + 12 }}
-        >
-          +{selectedIds.size}
-        </div>
-      )}
+      <div ref={ghostRef} className="drag-ghost" style={{ display: "none" }} />
 
       {ctxMenu && (
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.menuItems}
