@@ -3,6 +3,13 @@ import { useState, useEffect, useRef } from "react";
 const THUMB_COLORS = ["#e8e4dc", "#d4e8e0", "#dce4e8", "#e8dce4", "#e8e8dc"];
 function thumbBg(i) { return THUMB_COLORS[i % THUMB_COLORS.length]; }
 
+function getItemTranslate(i, src, dst, itemHeight) {
+  if (dst === null || dst === src || i === src) return 0;
+  if (dst < src) { if (i >= dst && i < src) return itemHeight; }
+  else           { if (i > src && i <= dst)  return -itemHeight; }
+  return 0;
+}
+
 function makeMeta(file) {
   return {
     title:      file ? file.name.replace(/\.[^/.]+$/, "") : "",
@@ -32,9 +39,13 @@ export default function AddOverlay({
   const [flowCollectionId, setFlowCollectionId] = useState("");
   const [flowScreenIdx,    setFlowScreenIdx]    = useState(null); // which screen note is open
   const [previewUrls,      setPreviewUrls]      = useState([]);
-  const [saving,           setSaving]           = useState(false);
-  const [dragOver,         setDragOver]         = useState(null);
-  const dragIndex  = useRef(null);
+  const [saving,      setSaving]      = useState(false);
+  const [dragActive,  setDragActive]  = useState(false);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
+  // Pointer-based lift drag — direct DOM updates for ghost position (no re-render on move)
+  const drag     = useRef({ active: false, srcIdx: null, overIdx: null, offsetX: 0, offsetY: 0, files: [], itemHeight: 0 });
+  const ghostRef = useRef(null);
+  const listRef  = useRef(null);
   const fileInputRef = useRef(null);
 
   // Sync imageMetas when files grow
@@ -74,27 +85,80 @@ export default function AddOverlay({
     setFlowTagInput("");
   };
 
-  // Drag reorder for flow mode
-  const handleDragStart = (e, i) => {
-    dragIndex.current = i;
-    e.dataTransfer.effectAllowed = "move";
-  };
-  const handleDragOver = (e, i) => {
+  // Pinterest-style lift drag
+  const handleHandlePointerDown = (e, i) => {
+    if (e.button !== 0) return;
     e.preventDefault();
-    if (i !== dragIndex.current) setDragOver(i);
+    e.stopPropagation();
+    const itemEl = e.currentTarget.closest(".apv2-list-item");
+    const flowEl = e.currentTarget.closest(".apv2-flow-item");
+    const itemRect = itemEl.getBoundingClientRect();
+    const flowRect = (flowEl ?? itemEl).getBoundingClientRect();
+    // Measure natural midpoints NOW before any translateY is applied
+    const flowItemEls = listRef.current?.querySelectorAll(".apv2-flow-item") ?? [];
+    const naturalMids = Array.from(flowItemEls).map((el) => {
+      const r = el.getBoundingClientRect();
+      return r.top + r.height / 2;
+    });
+    drag.current = {
+      active: true, srcIdx: i, overIdx: i,
+      offsetX: e.clientX - itemRect.left,
+      offsetY: e.clientY - itemRect.top,
+      files: [...imageFiles],
+      itemHeight: flowRect.height,
+      naturalMids,
+      // initial position for first render (ghostRef is null until React paints)
+      initLeft: itemRect.left,
+      initTop:  itemRect.top,
+      initWidth: itemRect.width,
+    };
+    document.body.classList.add("dragging");
+    setDragActive(true);
+    setDragOverIdx(i);
   };
-  const handleDrop = (e, i) => {
-    e.preventDefault();
-    const from = dragIndex.current;
-    if (from === null || from === i) { setDragOver(null); return; }
-    const reordered = [...imageFiles];
-    const [moved] = reordered.splice(from, 1);
-    reordered.splice(i, 0, moved);
-    onReorderFiles(reordered);
-    dragIndex.current = null;
-    setDragOver(null);
-  };
-  const handleDragEnd = () => { dragIndex.current = null; setDragOver(null); };
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!drag.current.active) return;
+      // Move ghost directly — no React re-render
+      if (ghostRef.current) {
+        ghostRef.current.style.left = `${e.clientX - drag.current.offsetX}px`;
+        ghostRef.current.style.top  = `${e.clientY - drag.current.offsetY}px`;
+      }
+      // Use natural (pre-transform) midpoints so shifted items don't confuse hit detection
+      const mids = drag.current.naturalMids;
+      if (mids.length) {
+        let newOver = mids.length - 1;
+        for (let i = 0; i < mids.length; i++) {
+          if (e.clientY < mids[i]) { newOver = i; break; }
+        }
+        if (newOver !== drag.current.overIdx) {
+          drag.current.overIdx = newOver;
+          setDragOverIdx(newOver);
+        }
+      }
+    };
+    const onUp = () => {
+      if (!drag.current.active) return;
+      const { srcIdx, overIdx, files } = drag.current;
+      drag.current.active = false;
+      document.body.classList.remove("dragging");
+      setDragActive(false);
+      setDragOverIdx(null);
+      if (srcIdx !== overIdx) {
+        const reordered = [...files];
+        const [moved] = reordered.splice(srcIdx, 1);
+        reordered.splice(overIdx, 0, moved);
+        onReorderFiles(reordered);
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [onReorderFiles]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -227,40 +291,48 @@ export default function AddOverlay({
                   ))}
                 </div>
               ) : (
-                <div className="apv2-list">
-                  {imageFiles.map((f, i) => (
-                    <div key={i} className="apv2-flow-item">
+                <div className="apv2-list" ref={listRef} style={{ touchAction: "none" }}>
+                  {imageFiles.map((f, i) => {
+                    const ty = getItemTranslate(i, drag.current.srcIdx, dragOverIdx, drag.current.itemHeight);
+                    return (
                       <div
-                        className={`apv2-list-item${flowScreenIdx === i ? " active" : ""}`}
-                        onDragOver={(e) => handleDragOver(e, i)}
-                        onDrop={(e) => handleDrop(e, i)}
-                        onDragEnd={handleDragEnd}
-                        onClick={() => setFlowScreenIdx(flowScreenIdx === i ? null : i)}
-                        style={dragOver === i ? { outline: "2px solid var(--accent)", outlineOffset: "-2px" } : {}}
+                        key={i}
+                        className="apv2-flow-item"
+                        style={dragActive ? {
+                          transform:  `translateY(${ty}px)`,
+                          transition: "transform 0.15s ease",
+                          opacity:    i === drag.current.srcIdx ? 0 : 1,
+                        } : {}}
                       >
-                        <span
-                          className="apv2-drag-handle"
-                          draggable
-                          onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, i); }}
-                          onClick={(e) => e.stopPropagation()}
-                          title="Drag to reorder"
-                        >⠿</span>
-                        <span className="apv2-list-num">{i + 1}</span>
-                        <div className="apv2-list-thumb" style={{ background: thumbBg(i) }}>
-                          {previewUrls[i] && <img src={previewUrls[i]} alt="" />}
+                        <div
+                          className={`apv2-list-item${flowScreenIdx === i ? " active" : ""}`}
+                          onClick={() => setFlowScreenIdx(flowScreenIdx === i ? null : i)}
+                        >
+                          <span
+                            className="apv2-drag-handle"
+                            onPointerDown={(e) => handleHandlePointerDown(e, i)}
+                            onClick={(e) => e.stopPropagation()}
+                            title="Drag to reorder"
+                            style={{ touchAction: "none", cursor: dragActive ? "grabbing" : "grab" }}
+                          >⠿</span>
+                          <span className="apv2-list-num">{i + 1}</span>
+                          <div className="apv2-list-thumb" style={{ background: thumbBg(i) }}>
+                            {previewUrls[i] && <img src={previewUrls[i]} alt="" draggable={false} />}
+                          </div>
+                          <span className="apv2-list-name">{f.name}</span>
+                          <button
+                            className="apv2-list-remove"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => { e.stopPropagation(); onRemoveFile(i); }}
+                            title="Remove"
+                          >×</button>
                         </div>
-                        <span className="apv2-list-name">{f.name}</span>
-                        <button
-                          className="apv2-list-remove"
-                          onClick={(e) => { e.stopPropagation(); onRemoveFile(i); }}
-                          title="Remove"
-                        >×</button>
+                        {i < imageFiles.length - 1 && (
+                          <div className="apv2-flow-arrow">↓</div>
+                        )}
                       </div>
-                      {i < imageFiles.length - 1 && (
-                        <div className="apv2-flow-arrow">↓</div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
@@ -431,6 +503,26 @@ export default function AddOverlay({
         </div>
 
       </div>
+
+      {/* Floating ghost — shown while dragging a flow screen */}
+      {dragActive && (
+        <div
+          ref={ghostRef}
+          className="apv2-drag-ghost"
+          style={{ left: drag.current.initLeft, top: drag.current.initTop, width: drag.current.initWidth }}
+        >
+          <div className="apv2-list-item">
+            <span className="apv2-drag-handle" style={{ opacity: 1, cursor: "grabbing" }}>⠿</span>
+            <span className="apv2-list-num">{drag.current.srcIdx + 1}</span>
+            <div className="apv2-list-thumb" style={{ background: thumbBg(drag.current.srcIdx) }}>
+              {previewUrls[drag.current.srcIdx] && (
+                <img src={previewUrls[drag.current.srcIdx]} alt="" draggable={false} style={{ pointerEvents: "none" }} />
+              )}
+            </div>
+            <span className="apv2-list-name">{imageFiles[drag.current.srcIdx]?.name}</span>
+          </div>
+        </div>
+      )}
 
       {/* Hidden file input */}
       <input
