@@ -94,9 +94,14 @@ export async function deleteItem(id) {
 export async function reorderItems(newOrderedIds) {
   const data = await loadData();
   const itemMap = new Map(data.items.map((i) => [i.id, i]));
-  data.items = newOrderedIds
+  const reordered = newOrderedIds
     .filter((id) => itemMap.has(id))
     .map((id) => itemMap.get(id));
+  if (reordered.length !== data.items.length) {
+    console.warn("reorderItems: ID count mismatch, aborting save");
+    return;
+  }
+  data.items = reordered;
   await saveData(data);
 }
 
