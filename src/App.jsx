@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { readFile } from "@tauri-apps/plugin-fs";
+import { arrayMove } from "@dnd-kit/sortable";
 import {
   loadItems, addItem, updateItem, deleteItem, getImageUrl,
   loadCollections, addCollection, updateCollection, deleteCollection, archiveCollection,
-  addFlow, updateFlow,
+  addFlow, updateFlow, reorderItems,
 } from "./store";
 import AddOverlay from "./components/AddOverlay";
 import ContextMenu from "./components/ContextMenu";
@@ -216,6 +217,17 @@ export default function App() {
       setImageUrls((prev) => { const n = { ...prev }; delete n[id]; return n; });
     }
   };
+
+  const handleReorder = useCallback((activeId, overId) => {
+    setItems((prev) => {
+      const oldIndex = prev.findIndex((i) => i.id === activeId);
+      const newIndex = prev.findIndex((i) => i.id === overId);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      const reordered = arrayMove(prev, oldIndex, newIndex);
+      reorderItems(reordered.map((i) => i.id)).catch(console.error);
+      return reordered;
+    });
+  }, []);
 
   // ── Collection handlers ──────────────────────────────────────────────────────
 
@@ -440,6 +452,7 @@ export default function App() {
           onCardClick={handleCardClick}
           onCardContextMenu={handleCardContextMenu}
           isDragging={isDragging}
+          onReorder={handleReorder}
         />
         <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: "none" }}
           onChange={(e) => {
