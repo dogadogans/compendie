@@ -89,6 +89,17 @@ export async function deleteItem(id) {
   await saveData(data);
 }
 
+// Takes a full array of item IDs in their new desired order.
+// Reorders data.items to match, then saves.
+export async function reorderItems(newOrderedIds) {
+  const data = await loadData();
+  const itemMap = new Map(data.items.map((i) => [i.id, i]));
+  data.items = newOrderedIds
+    .filter((id) => itemMap.has(id))
+    .map((id) => itemMap.get(id));
+  await saveData(data);
+}
+
 // Each screen: { id?: string, file?: File, image_path?: string, note?: string }
 // screens with `file` → save to disk; screens with `image_path` → use as-is
 export async function addFlow({ title, screens, tags, collections, note }) {
