@@ -1,5 +1,12 @@
 import { useState, useEffect, useRef } from "react";
+import {
+  DndContext, DragOverlay, PointerSensor,
+  useSensor, useSensors, closestCenter,
+} from "@dnd-kit/core";
+import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
 import FlowCard from "./FlowCard";
+import SortableCard from "./SortableCard";
+import useMasonryLayout from "../hooks/useMasonryLayout";
 
 export default function Grid({
   items,
@@ -13,8 +20,30 @@ export default function Grid({
   onCardClick,
   onCardContextMenu,
   isDragging,
+  onReorder,
 }) {
   const [activeTab, setActiveTab] = useState("images");
+  const [activeId, setActiveId] = useState(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { delay: 150, tolerance: 5 },
+    })
+  );
+
+  function handleDragStart({ active }) {
+    // If dragging an unselected card while selection exists, clear selection first
+    if (selectedIdsRef.current.size > 0 && !selectedIdsRef.current.has(active.id)) {
+      onSelectionChange(new Set());
+    }
+    setActiveId(active.id);
+  }
+
+  function handleDragEnd({ active, over }) {
+    setActiveId(null);
+    if (!over || active.id === over.id) return;
+    onReorder(active.id, over.id);
+  }
 
   // Reset tab to "images" whenever the active collection changes
   useEffect(() => {
@@ -124,6 +153,11 @@ export default function Grid({
     ? (activeTab === "images" ? imageItems : flowItems)
     : items;
 
+  const { positions, containerHeight, columnWidth, containerRef: masonryRef } =
+    useMasonryLayout(visibleItems);
+
+  const activeItem = activeId ? items.find((i) => i.id === activeId) : null;
+
   return (
     <div className="grid-area" ref={gridRef}>
       <div ref={rbOverlay} className="rubber-band" style={{ display: "none" }} />
@@ -183,40 +217,111 @@ export default function Grid({
               : "Drag an image in or paste with Ctrl+V to get started."}
         </div>
       ) : (
-        <div className={`grid${isDragging ? " drop-active" : ""}`}>
-          {isDragging && <div className="grid-drop-overlay"><span>Drop to save</span></div>}
-          {visibleItems.map((item) => {
-            if (item.type === "flow") {
-              const firstScreenUrl = item.screens?.[0]
-                ? imageUrls[item.screens[0].id]
-                : undefined;
-              return (
-                <FlowCard
-                  key={item.id}
-                  item={item}
-                  imageUrl={firstScreenUrl}
-                  selected={selectedIds?.has(item.id)}
-                  onClick={() => onCardClick(item)}
-                  onContextMenu={onCardContextMenu}
-                />
-              );
-            }
-            return (
-              <div
-                key={item.id}
-                data-item-id={item.id}
-                className={`card${selectedIds?.has(item.id) ? " selected" : ""}`}
-                onClick={() => onCardClick(item)}
-                onContextMenu={(e) => { e.preventDefault(); onCardContextMenu(e, item); }}
-                title={item.title || undefined}
-              >
-                {imageUrls[item.id]
-                  ? <img src={imageUrls[item.id]} alt={item.title || "image"} loading="lazy" />
-                  : <div className="card-placeholder" />}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={visibleItems.map((i) => i.id)}
+            strategy={rectSortingStrategy}
+          >
+            <div
+              ref={(el) => {
+                gridRef.current    = el;
+                masonryRef.current = el;
+              }}
+              className={`grid${isDragging ? " drop-active" : ""}`}
+              style={{ height: containerHeight || undefined }}
+            >
+              {isDragging && <div className="grid-drop-overlay"><span>Drop to save</span></div>}
+              {visibleItems.map((item) => {
+                const pos = positions[item.id];
+                const cardStyle = pos
+                  ? { position: "absolute", left: pos.x, top: pos.y, width: pos.width }
+                  : { position: "absolute", left: 0, top: 0, width: columnWidth, visibility: "hidden" };
+
+                if (item.type === "flow") {
+                  const firstScreenUrl = item.screens?.[0]
+                    ? imageUrls[item.screens[0].id]
+                    : undefined;
+                  return (
+                    <SortableCard
+                      key={item.id}
+                      id={item.id}
+                      style={cardStyle}
+                      disabled={selectedIds?.has(item.id)}
+                    >
+                      <FlowCard
+                        item={item}
+                        imageUrl={firstScreenUrl}
+                        selected={selectedIds?.has(item.id)}
+                        onClick={() => onCardClick(item)}
+                        onContextMenu={onCardContextMenu}
+                      />
+                    </SortableCard>
+                  );
+                }
+
+                return (
+                  <SortableCard
+                    key={item.id}
+                    id={item.id}
+                    style={cardStyle}
+                    disabled={selectedIds?.has(item.id)}
+                  >
+                    <div
+                      data-item-id={item.id}
+                      className={`card${selectedIds?.has(item.id) ? " selected" : ""}`}
+                      onClick={() => onCardClick(item)}
+                      onContextMenu={(e) => { e.preventDefault(); onCardContextMenu(e, item); }}
+                      title={item.title || undefined}
+                    >
+                      {imageUrls[item.id]
+                        ? <img src={imageUrls[item.id]} alt={item.title || "image"} loading="lazy" />
+                        : <div className="card-placeholder" />}
+                    </div>
+                  </SortableCard>
+                );
+              })}
+            </div>
+          </SortableContext>
+
+          <DragOverlay>
+            {activeItem && (
+              <div style={{
+                opacity: 0.6,
+                transform: "scale(1.03)",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+                borderRadius: 8,
+                overflow: "hidden",
+                width: columnWidth,
+                cursor: "grabbing",
+              }}>
+                {activeItem.type === "flow" ? (
+                  <FlowCard
+                    item={activeItem}
+                    imageUrl={activeItem.screens?.[0] ? imageUrls[activeItem.screens[0].id] : undefined}
+                    selected={false}
+                    onClick={() => {}}
+                    onContextMenu={() => {}}
+                  />
+                ) : (
+                  <div className="card">
+                    {imageUrls[activeItem.id]
+                      ? <img
+                          src={imageUrls[activeItem.id]}
+                          alt={activeItem.title || "image"}
+                          style={{ display: "block", width: "100%", height: "auto" }}
+                        />
+                      : <div className="card-placeholder" />}
+                  </div>
+                )}
               </div>
-            );
-          })}
-        </div>
+            )}
+          </DragOverlay>
+        </DndContext>
       )}
     </div>
   );
