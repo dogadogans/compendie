@@ -3,7 +3,7 @@ import {
   DndContext, DragOverlay, PointerSensor,
   useSensor, useSensors, closestCenter,
 } from "@dnd-kit/core";
-import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext } from "@dnd-kit/sortable";
 import FlowCard from "./FlowCard";
 import SortableCard from "./SortableCard";
 import useMasonryLayout from "../hooks/useMasonryLayout";
@@ -223,15 +223,9 @@ export default function Grid({
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <SortableContext
-            items={visibleItems.map((i) => i.id)}
-            strategy={rectSortingStrategy}
-          >
+          <SortableContext items={visibleItems.map((i) => i.id)}>
             <div
-              ref={(el) => {
-                gridRef.current    = el;
-                masonryRef.current = el;
-              }}
+              ref={(el) => { masonryRef.current = el; }}
               className={`grid${isDragging ? " drop-active" : ""}`}
               style={{ height: containerHeight || undefined }}
             >
