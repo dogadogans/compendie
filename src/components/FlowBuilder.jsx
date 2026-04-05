@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 // Props:
 //   mode: "create" | "edit"
 //   flow: existing flow object (edit mode only)
-//   items: all items (for Tome picker — only type:"image")
+//   items: all items (for Compendie picker — only type:"image")
 //   imageUrls: { [id]: objectURL }
 //   collections: non-archived collections
 //   onSave(payload): called in create mode
@@ -26,9 +26,11 @@ export default function FlowBuilder({
   );
   const [pickerOpen,    setPickerOpen]    = useState(false);
   const [saving,        setSaving]        = useState(false);
-  const [dragIdx,       setDragIdx]       = useState(null);  // which card is being dragged
-  const [dragOverIdx,   setDragOverIdx]   = useState(null);  // which card is the drop target
-  const dragSrcRef = useRef(null); // stable ref to source index
+  const [dragIdx,       setDragIdx]       = useState(null);
+  const [dragOverIdx,   setDragOverIdx]   = useState(null);
+  // Pointer-based reorder (HTML5 drag unreliable in Tauri WebView)
+  const pointerDrag = useRef({ active: false, srcIdx: null, overIdx: null });
+  const trayRef = useRef(null);
 
   // Track object URLs we create so we can revoke on unmount
   const ownedUrls = useRef([]);
@@ -79,40 +81,51 @@ export default function FlowBuilder({
   const removeScreen = (idx) =>
     setScreens((prev) => prev.filter((_, i) => i !== idx));
 
-  // Drag-to-reorder — commit only on drop so DOM stays stable during drag
-  const handleDragStart = (idx) => {
-    dragSrcRef.current = idx;
+  // Pointer-based reorder — more reliable than HTML5 drag in Tauri WebView
+  const handleThumbPointerDown = (e, idx) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    pointerDrag.current = { active: true, srcIdx: idx, overIdx: idx };
     setDragIdx(idx);
   };
 
-  const handleDragEnterScreen = (idx) => {
-    if (dragSrcRef.current === null || dragSrcRef.current === idx) return;
-    setDragOverIdx(idx);
-  };
-
-  const handleDropOnScreen = (e, idx) => {
-    e.preventDefault();
-    const from = dragSrcRef.current;
-    if (from === null || from === idx) {
-      setDragOverIdx(null);
-      return;
+  const handleTrayPointerMove = (e) => {
+    if (!pointerDrag.current.active || !trayRef.current) return;
+    const thumbs = trayRef.current.querySelectorAll(".flow-tray-thumb");
+    // insertAt is a gap index: 0 = before first, n = after last
+    let insertAt = thumbs.length;
+    for (let i = 0; i < thumbs.length; i++) {
+      const rect = thumbs[i].getBoundingClientRect();
+      if (e.clientX < rect.left + rect.width / 2) { insertAt = i; break; }
     }
-    setScreens((prev) => {
-      const next = [...prev];
-      const [moved] = next.splice(from, 1);
-      next.splice(idx, 0, moved);
-      return next;
-    });
-    dragSrcRef.current = null;
-    setDragIdx(null);
-    setDragOverIdx(null);
+    if (pointerDrag.current.overIdx !== insertAt) {
+      pointerDrag.current.overIdx = insertAt;
+      setDragOverIdx(insertAt);
+    }
   };
 
-  const handleDragEnd = () => {
-    dragSrcRef.current = null;
-    setDragIdx(null);
-    setDragOverIdx(null);
-  };
+  // Cancel drag if pointer released outside tray
+  useEffect(() => {
+    const onUp = () => {
+      if (!pointerDrag.current.active) return;
+      const { srcIdx, overIdx } = pointerDrag.current;
+      pointerDrag.current.active = false;
+      setDragIdx(null);
+      setDragOverIdx(null);
+      // overIdx is a gap index (0..n); adjust after splice removes srcIdx
+      const effectiveInsert = overIdx > srcIdx ? overIdx - 1 : overIdx;
+      if (srcIdx !== null && overIdx !== null && effectiveInsert !== srcIdx) {
+        setScreens((prev) => {
+          const next = [...prev];
+          const [moved] = next.splice(srcIdx, 1);
+          next.splice(effectiveInsert, 0, moved);
+          return next;
+        });
+      }
+    };
+    window.addEventListener("pointerup", onUp);
+    return () => window.removeEventListener("pointerup", onUp);
+  }, []);
 
   const handleSave = async () => {
     if (!title.trim() && screens.length === 0) return;
@@ -164,31 +177,39 @@ export default function FlowBuilder({
 
           {/* Screen tray */}
           <div className="flow-builder-tray">
-            <div className="flow-builder-screens">
+            <div
+              className="flow-builder-screens"
+              ref={trayRef}
+              onPointerMove={handleTrayPointerMove}
+              style={{ touchAction: "none" }}
+            >
               {screens.length === 0 && (
                 <div className="flow-tray-empty">Add screens below to get started</div>
               )}
-              {screens.map((screen, idx) => (
+              {screens.flatMap((screen, idx) => [
+                dragIdx !== null && dragOverIdx === idx
+                  ? <div key={`ins-${idx}`} className="flow-insert-line" />
+                  : null,
                 <div
                   key={screen.id}
-                  className={`flow-tray-thumb${dragIdx === idx ? " dragging" : ""}${dragOverIdx === idx && dragIdx !== idx ? " drag-over" : ""}`}
-                  draggable
-                  onDragStart={() => handleDragStart(idx)}
-                  onDragEnter={() => handleDragEnterScreen(idx)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => handleDropOnScreen(e, idx)}
-                  onDragEnd={handleDragEnd}
+                  className={`flow-tray-thumb${dragIdx === idx ? " dragging" : ""}`}
+                  onPointerDown={(e) => handleThumbPointerDown(e, idx)}
+                  style={{ userSelect: "none" }}
                 >
                   {screen.previewUrl
-                    ? <img src={screen.previewUrl} alt={`Screen ${idx + 1}`} />
+                    ? <img src={screen.previewUrl} alt={`Screen ${idx + 1}`} draggable={false} style={{ pointerEvents: "none" }} />
                     : <div className="flow-tray-thumb-placeholder" />}
                   <button
                     className="flow-tray-remove"
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={() => removeScreen(idx)}
                   >×</button>
                   <div className="flow-tray-num">{idx + 1}</div>
-                </div>
-              ))}
+                </div>,
+              ]).filter(Boolean)}
+              {dragIdx !== null && dragOverIdx === screens.length && (
+                <div className="flow-insert-line" />
+              )}
             </div>
 
             <div className="flow-tray-add-row">
@@ -207,18 +228,18 @@ export default function FlowBuilder({
                 From files
               </button>
               <button className="btn-ghost" onClick={() => setPickerOpen((v) => !v)}>
-                {pickerOpen ? "Close picker" : "Pick from Tome"}
+                {pickerOpen ? "Close picker" : "Pick from Compendie"}
               </button>
             </div>
           </div>
 
-          {/* Tome picker panel */}
+          {/* Compendie picker panel */}
           {pickerOpen && (
             <div className="flow-picker-panel">
-              <div className="flow-picker-header">Pick from Tome</div>
+              <div className="flow-picker-header">Pick from Compendie</div>
               <div className="flow-picker-grid">
                 {imageItems.length === 0 && (
-                  <div className="flow-picker-empty">No images in Tome yet</div>
+                  <div className="flow-picker-empty">No images in Compendie yet</div>
                 )}
                 {imageItems.map((item) => {
                   const selected = inTrayPaths.has(item.image_path);

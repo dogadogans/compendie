@@ -26,8 +26,9 @@ export default function App() {
   const [search,       setSearch]       = useState("");
   const [activeView,   setActiveView]   = useState({ type: "all" });
   const [selectedItem, setSelectedItem] = useState(null);
-  const [pendingFiles, setPendingFiles] = useState([]);
-  const [isDragging,   setIsDragging]   = useState(false);
+  const [pendingFiles,    setPendingFiles]    = useState([]);
+  const [addOverlayOpen,  setAddOverlayOpen]  = useState(false);
+  const [isDragging,      setIsDragging]      = useState(false);
   const [ctxMenu,      setCtxMenu]      = useState(null);
   const [selectedIds,        setSelectedIds]        = useState(new Set());
   const selectedIdsRef = useRef(new Set());
@@ -37,10 +38,10 @@ export default function App() {
   // null | flow-item object
   const [flowDetail, setFlowDetail] = useState(null);
   const [sidebarWidth, setSidebarWidth] = useState(
-    () => parseInt(localStorage.getItem("tome_sidebar_width") || "240")
+    () => parseInt(localStorage.getItem("compendie_sidebar_width") || "240")
   );
   const [panelWidth,   setPanelWidth]   = useState(
-    () => parseInt(localStorage.getItem("tome_panel_width")   || "320")
+    () => parseInt(localStorage.getItem("compendie_panel_width")   || "320")
   );
   const ghostRef    = useRef(null);  // direct DOM ref — updated without React re-renders
   const dragColRef  = useRef(null);  // current hovered collection id during drag
@@ -87,7 +88,10 @@ export default function App() {
   useEffect(() => {
     const onPaste = (e) => {
       const file = e.clipboardData?.files?.[0];
-      if (file?.type.startsWith("image/")) setPendingFiles((prev) => [...prev, file]);
+      if (file?.type.startsWith("image/")) {
+        setPendingFiles((prev) => [...prev, file]);
+        setAddOverlayOpen(true);
+      }
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
@@ -109,6 +113,7 @@ export default function App() {
           const filename = imagePath.replace(/\\/g, "/").split("/").pop();
           const blob = new Blob([bytes], { type: MIME[ext] || "image/png" });
           setPendingFiles((prev) => [...prev, new File([blob], filename, { type: blob.type })]);
+          setAddOverlayOpen(true);
         } catch (e) { console.error("Failed to read dragged file:", e); }
       });
     })();
@@ -133,14 +138,17 @@ export default function App() {
 
   // Save all pending files as separate images
   const handleSaveNew = async (dataList) => {
-    const collectionIds = dataList[0]?.collectionId
-      ? [dataList[0].collectionId]
-      : activeView.type === "collection" ? [activeView.id] : [];
     const saved = await Promise.all(
-      dataList.map((data) => addItem({ ...data, collections: collectionIds }))
+      dataList.map((data) => {
+        const collectionIds = data.collectionId
+          ? [data.collectionId]
+          : activeView.type === "collection" ? [activeView.id] : [];
+        return addItem({ ...data, collections: collectionIds });
+      })
     );
     setItems((prev) => [...saved.reverse(), ...prev]);
     setPendingFiles([]);
+    setAddOverlayOpen(false);
   };
 
   // Save all pending files as a single flow
@@ -151,6 +159,7 @@ export default function App() {
     const item = await addFlow({ ...data, collections: collectionIds });
     setItems((prev) => [item, ...prev]);
     setPendingFiles([]);
+    setAddOverlayOpen(false);
   };
 
   const handleUpdate = useCallback(async (id, changes) => {
@@ -241,7 +250,7 @@ export default function App() {
     const onMove = (ev) => {
       const w = Math.min(340, Math.max(200, startWidth + ev.clientX - startX));
       setSidebarWidth(w);
-      localStorage.setItem("tome_sidebar_width", w);
+      localStorage.setItem("compendie_sidebar_width", w);
     };
     const onUp = () => {
       document.removeEventListener("mousemove", onMove);
@@ -261,7 +270,7 @@ export default function App() {
       // Panel is on the right — dragging left makes it wider
       const w = Math.min(560, Math.max(260, startWidth - (ev.clientX - startX)));
       setPanelWidth(w);
-      localStorage.setItem("tome_panel_width", w);
+      localStorage.setItem("compendie_panel_width", w);
     };
     const onUp = () => {
       document.removeEventListener("mousemove", onMove);
@@ -421,6 +430,7 @@ export default function App() {
         onAddCollection={handleAddCollection}
         onRenameCollection={handleRenameCollection}
         onContextMenu={handleCollectionContextMenu}
+        onAddClick={() => setAddOverlayOpen(true)}
         width={sidebarWidth}
         onResizeStart={handleSidebarResizeStart}
       />
@@ -437,8 +447,6 @@ export default function App() {
           onSelectionDragStart={handleSelectionDragStart}
           onCardClick={handleCardClick}
           onCardContextMenu={handleCardContextMenu}
-          onAddClick={() => fileInputRef.current?.click()}
-          onAddFlowClick={() => setFlowBuilder({ mode: "create" })}
           isDragging={isDragging}
         />
         <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: "none" }}
@@ -468,13 +476,16 @@ export default function App() {
           onClose={() => setCtxMenu(null)} />
       )}
 
-      {pendingFiles.length > 0 && (
+      {(addOverlayOpen || pendingFiles.length > 0) && (
         <AddOverlay
           imageFiles={pendingFiles}
           collections={collections.filter((c) => !c.archived)}
           onSave={handleSaveNew}
           onSaveFlow={handleSaveNewFlow}
-          onCancel={() => setPendingFiles([])}
+          onCancel={() => { setPendingFiles([]); setAddOverlayOpen(false); }}
+          onRemoveFile={(i) => setPendingFiles((prev) => prev.filter((_, idx) => idx !== i))}
+          onReorderFiles={setPendingFiles}
+          onAddFiles={(files) => setPendingFiles((prev) => [...prev, ...files])}
         />
       )}
 

@@ -12,8 +12,6 @@ export default function Grid({
   onSelectionDragStart,
   onCardClick,
   onCardContextMenu,
-  onAddClick,
-  onAddFlowClick,
   isDragging,
 }) {
   const [activeTab, setActiveTab] = useState("images");
@@ -149,8 +147,6 @@ export default function Grid({
             >Flows</button>
           </div>
         )}
-        <button className="btn-add" onClick={onAddClick}>+ Image</button>
-        <button className="btn-add" onClick={onAddFlowClick}>+ Flow</button>
       </header>
 
       {inCollection && activeTab === "flows" ? (

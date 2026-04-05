@@ -1,4 +1,4 @@
-// Data layer — reads/writes ~/tome/data.json
+// Data layer — reads/writes ~/compendie/data.json
 // Schema: { collections: [...], items: [...] }
 
 import {
@@ -7,12 +7,12 @@ import {
 } from "@tauri-apps/plugin-fs";
 import { v4 as uuidv4 } from "uuid";
 
-const IMAGES_DIR = "tome/images";
-const DATA_FILE  = "tome/data.json";
+const IMAGES_DIR = "compendie/images";
+const DATA_FILE  = "compendie/data.json";
 
 async function ensureDirs() {
-  if (!(await exists("tome",       { baseDir: BaseDirectory.Home })))
-    await mkdir("tome",       { baseDir: BaseDirectory.Home, recursive: true });
+  if (!(await exists("compendie",       { baseDir: BaseDirectory.Home })))
+    await mkdir("compendie",       { baseDir: BaseDirectory.Home, recursive: true });
   if (!(await exists(IMAGES_DIR,   { baseDir: BaseDirectory.Home })))
     await mkdir(IMAGES_DIR,   { baseDir: BaseDirectory.Home, recursive: true });
 }
@@ -47,7 +47,7 @@ async function saveImage(bytes, originalName) {
   const ext      = originalName.split(".").pop() || "png";
   const filename = `${uuidv4()}.${ext}`;
   await writeFile(`${IMAGES_DIR}/${filename}`, bytes, { baseDir: BaseDirectory.Home });
-  return `tome/images/${filename}`;
+  return `compendie/images/${filename}`;
 }
 
 export async function addItem({ imageBytes, originalName, title, tags, collections, note }) {

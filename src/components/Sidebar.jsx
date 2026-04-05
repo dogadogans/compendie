@@ -11,15 +11,16 @@ export default function Sidebar({
   onAddCollection,
   onRenameCollection,
   onContextMenu,
+  onAddClick,
   width,
   onResizeStart,
 }) {
   const [expandedIds,      setExpandedIds]      = useState(new Set());
   const [tagsExpanded,     setTagsExpanded]     = useState(
-    () => localStorage.getItem("tome_tags_expanded") === "true"
+    () => localStorage.getItem("compendie_tags_expanded") === "true"
   );
   const [archivedExpanded, setArchivedExpanded] = useState(
-    () => localStorage.getItem("tome_archived_expanded") === "true"
+    () => localStorage.getItem("compendie_archived_expanded") === "true"
   );
   const [addingCollection,    setAddingCollection]    = useState(false);
   const [newCollectionName,   setNewCollectionName]   = useState("");
@@ -114,7 +115,10 @@ export default function Sidebar({
 
   return (
     <aside className="sidebar" style={{ width }}>
-      <div className="sidebar-logo">Tome</div>
+      <div className="sidebar-logo">
+        <span>Compendie</span>
+        <button className="sidebar-add-btn" onClick={onAddClick}>+</button>
+      </div>
 
       <nav className="sidebar-nav">
         <button
@@ -171,21 +175,25 @@ export default function Sidebar({
               onClick={() => {
                 const next = !tagsExpanded;
                 setTagsExpanded(next);
-                localStorage.setItem("tome_tags_expanded", next);
+                localStorage.setItem("compendie_tags_expanded", next);
               }}
             >
               <span className="collapse-arrow">{tagsExpanded ? "▾" : "▸"}</span>
               Tags
             </button>
-            {tagsExpanded && allTags.map((tag) => (
-              <button
-                key={tag}
-                className={`nav-item${activeView.type === "tag" && activeView.tag === tag ? " active" : ""}`}
-                onClick={() => onSelectTag(tag)}
-              >
-                {tag}
-              </button>
-            ))}
+            {tagsExpanded && (
+              <div className="tag-chips">
+                {allTags.map((tag) => (
+                  <button
+                    key={tag}
+                    className={`tag-chip${activeView.type === "tag" && activeView.tag === tag ? " active" : ""}`}
+                    onClick={() => onSelectTag(tag)}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </>
       )}
@@ -200,7 +208,7 @@ export default function Sidebar({
               onClick={() => {
                 const next = !archivedExpanded;
                 setArchivedExpanded(next);
-                localStorage.setItem("tome_archived_expanded", next);
+                localStorage.setItem("compendie_archived_expanded", next);
               }}
             >
               <span className="collapse-arrow">{archivedExpanded ? "▾" : "▸"}</span>
