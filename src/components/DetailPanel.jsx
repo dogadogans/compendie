@@ -2,13 +2,13 @@ import { useState, useEffect, useRef } from "react";
 
 export default function DetailPanel({
   item,
-  imageUrl,
+  allItems,
+  imageUrls,
   collections,
   onUpdate,
   onDelete,
   onClose,
-  width,
-  onResizeStart,
+  onNavigate,
 }) {
   const [title,    setTitle]    = useState(item.title);
   const [tagInput, setTagInput] = useState("");
@@ -16,6 +16,14 @@ export default function DetailPanel({
   const [note,     setNote]     = useState(item.note);
   const [showCollectionPicker, setShowCollectionPicker] = useState(false);
   const pickerRef = useRef(null);
+
+  // Images only — flows are handled by FlowDetail
+  const imageItems = allItems.filter((i) => i.type !== "flow");
+  const currentIndex = imageItems.findIndex((i) => i.id === item.id);
+  const hasPrev = currentIndex > 0;
+  const hasNext = currentIndex < imageItems.length - 1;
+
+  const imageUrl = imageUrls[item.id];
 
   // Sync when a different item is selected
   useEffect(() => {
@@ -36,12 +44,18 @@ export default function DetailPanel({
     return () => document.removeEventListener("mousedown", handler);
   }, [showCollectionPicker]);
 
-  // Escape to close panel
+  // Keyboard: Escape to close, arrows to navigate
   useEffect(() => {
-    const handler = (e) => { if (e.key === "Escape") onClose(); };
+    const handler = (e) => {
+      if (e.key === "Escape") { onClose(); return; }
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key === "ArrowLeft"  && hasPrev) onNavigate(imageItems[currentIndex - 1]);
+      if (e.key === "ArrowRight" && hasNext) onNavigate(imageItems[currentIndex + 1]);
+    };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [onClose, onNavigate, hasPrev, hasNext, currentIndex, imageItems]);
 
   const saveTitle = () => {
     if (title !== item.title) onUpdate(item.id, { title });
@@ -81,96 +95,126 @@ export default function DetailPanel({
   const availableCollections = collections.filter((c) => !c.archived && !item.collections.includes(c.id));
 
   return (
-    <div className="detail-panel-eagle" style={{ width }}>
-      {/* Resize handle on left edge */}
-      <div className="panel-resize-handle" onMouseDown={onResizeStart} />
+    <div className="detail-fullscreen">
 
-      {/* Close */}
-      <button className="panel-close" onClick={onClose} title="Close (Esc)">×</button>
-
-      {/* Image */}
-      <div className="panel-image-wrap">
+      {/* ── Image side ── */}
+      <div className="detail-img-side">
         {imageUrl
-          ? <img src={imageUrl} alt={item.title || "image"} />
-          : <div className="panel-image-placeholder" />}
-      </div>
+          ? <img src={imageUrl} alt={item.title || "image"} className="detail-img" />
+          : <div className="detail-img-placeholder" />}
 
-      {/* Title */}
-      <input
-        className="panel-title"
-        value={title}
-        placeholder="Untitled"
-        onChange={(e) => setTitle(e.target.value)}
-        onBlur={saveTitle}
-      />
+        {/* Nav arrows */}
+        {hasPrev && (
+          <button
+            className="detail-nav-arrow detail-nav-prev"
+            onClick={() => onNavigate(imageItems[currentIndex - 1])}
+            title="Previous (←)"
+          >‹</button>
+        )}
+        {hasNext && (
+          <button
+            className="detail-nav-arrow detail-nav-next"
+            onClick={() => onNavigate(imageItems[currentIndex + 1])}
+            title="Next (→)"
+          >›</button>
+        )}
 
-      {/* Tags */}
-      <div className="panel-tags-wrap">
-        {tags.map((t) => (
-          <span key={t} className="tag-pill">
-            {t}
-            <button className="tag-remove" onClick={() => removeTag(t)}>×</button>
-          </span>
-        ))}
-        <input
-          className="tag-input"
-          placeholder="Add tag…"
-          value={tagInput}
-          onChange={(e) => setTagInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); addTag(); }
-          }}
-          onBlur={addTag}
-        />
-      </div>
+        {/* Close */}
+        <button className="detail-close" onClick={onClose} title="Close (Esc)">×</button>
 
-      {/* Collections */}
-      <div className="panel-collections-wrap" ref={pickerRef}>
-        {activeCollections.map((col) => (
-          <span key={col.id} className="collection-pill">
-            {col.icon} {col.name}
-            <button className="tag-remove" onClick={() => toggleCollection(col.id)}>×</button>
-          </span>
-        ))}
-        {availableCollections.length > 0 && (
-          <div className="collection-add-wrap">
-            <button
-              className="collection-add-btn"
-              onClick={() => setShowCollectionPicker((v) => !v)}
-            >+</button>
-            {showCollectionPicker && (
-              <div className="collection-picker">
-                {availableCollections.map((col) => (
-                  <button
-                    key={col.id}
-                    className="collection-picker-item"
-                    onClick={() => { toggleCollection(col.id); setShowCollectionPicker(false); }}
-                  >
-                    {col.icon} {col.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+        {/* Counter */}
+        {imageItems.length > 1 && (
+          <span className="detail-counter">{currentIndex + 1} of {imageItems.length}</span>
         )}
       </div>
 
-      {/* Note */}
-      <textarea
-        className="panel-note"
-        placeholder="Add a note…"
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        onBlur={saveNote}
-      />
+      {/* ── Metadata side ── */}
+      <div className="detail-meta-side">
 
-      {/* Date */}
-      <p className="panel-date">{formattedDate}</p>
+        {/* Title */}
+        <input
+          className="panel-title detail-meta-title"
+          value={title}
+          placeholder="Untitled"
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={saveTitle}
+        />
 
-      {/* Delete */}
-      <button className="btn-danger panel-delete" onClick={() => { onDelete(item.id); onClose(); }}>
-        Delete
-      </button>
+        <div className="detail-meta-divider" />
+
+        {/* Tags */}
+        <span className="detail-meta-label">Tags</span>
+        <div className="panel-tags-wrap">
+          {tags.map((t) => (
+            <span key={t} className="tag-pill">
+              {t}
+              <button className="tag-remove" onClick={() => removeTag(t)}>×</button>
+            </span>
+          ))}
+          <input
+            className="tag-input"
+            placeholder="Add tag…"
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); addTag(); }
+            }}
+            onBlur={addTag}
+          />
+        </div>
+
+        {/* Collections */}
+        <span className="detail-meta-label" style={{ marginTop: "16px" }}>Collections</span>
+        <div className="panel-collections-wrap" ref={pickerRef}>
+          {activeCollections.map((col) => (
+            <span key={col.id} className="collection-pill">
+              {col.icon} {col.name}
+              <button className="tag-remove" onClick={() => toggleCollection(col.id)}>×</button>
+            </span>
+          ))}
+          {availableCollections.length > 0 && (
+            <div className="collection-add-wrap">
+              <button
+                className="collection-add-btn"
+                onClick={() => setShowCollectionPicker((v) => !v)}
+              >+</button>
+              {showCollectionPicker && (
+                <div className="collection-picker">
+                  {availableCollections.map((col) => (
+                    <button
+                      key={col.id}
+                      className="collection-picker-item"
+                      onClick={() => { toggleCollection(col.id); setShowCollectionPicker(false); }}
+                    >
+                      {col.icon} {col.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Note */}
+        <span className="detail-meta-label" style={{ marginTop: "16px" }}>Note</span>
+        <textarea
+          className="panel-note"
+          placeholder="Add a note…"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          onBlur={saveNote}
+        />
+
+        {/* Footer */}
+        <div className="detail-meta-footer">
+          <p className="panel-date">{formattedDate}</p>
+          <button
+            className="btn-danger panel-delete"
+            onClick={() => { onDelete(item.id); onClose(); }}
+          >Delete</button>
+        </div>
+
+      </div>
     </div>
   );
 }

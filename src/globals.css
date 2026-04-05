@@ -90,3 +90,11 @@
   --orange-900: #823A0C;
   --orange-950: #471B03;
 }
+
+/* Suppress all selection/drag while pointer-dragging a list item */
+body.dragging *,
+body.dragging img {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-user-drag: none !important;
+}

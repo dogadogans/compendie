@@ -40,14 +40,13 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(
     () => parseInt(localStorage.getItem("compendie_sidebar_width") || "240")
   );
-  const [panelWidth,   setPanelWidth]   = useState(
-    () => parseInt(localStorage.getItem("compendie_panel_width")   || "320")
-  );
   const ghostRef    = useRef(null);  // direct DOM ref — updated without React re-renders
   const dragColRef  = useRef(null);  // current hovered collection id during drag
   const itemsRef    = useRef(items); // always-current items for use in stable callbacks
   useEffect(() => { itemsRef.current = items; }, [items]);
-  const dragCounter = useRef(0);
+  const dragCounter     = useRef(0);
+  const recentDropPaths = useRef(new Set()); // dedup Tauri double-emit per path
+  const recentDropTimer = useRef(null);
   const fileInputRef = useRef(null);
   const loadedIds = useRef(new Set());
 
@@ -98,6 +97,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     let unlistenHover, unlistenDrop, unlistenLeave;
     (async () => {
       unlistenHover = await listen("tauri://drag-over", () => { dragCounter.current += 1; setIsDragging(true); });
@@ -105,19 +105,31 @@ export default function App() {
       unlistenDrop = await listen("tauri://drag-drop", async (event) => {
         dragCounter.current = 0; setIsDragging(false);
         const paths = event.payload?.paths ?? [];
-        const imagePath = paths.find((p) => IMAGE_EXTENSIONS.includes(p.split(".").pop().toLowerCase()));
-        if (!imagePath) return;
+        const allImagePaths = paths.filter((p) => IMAGE_EXTENSIONS.includes(p.split(".").pop().toLowerCase()));
+        // Deduplicate: skip paths already seen in this drag session (Tauri double-emits on Windows)
+        const newPaths = allImagePaths.filter((p) => !recentDropPaths.current.has(p));
+        if (!newPaths.length) return;
+        newPaths.forEach((p) => recentDropPaths.current.add(p));
+        clearTimeout(recentDropTimer.current);
+        recentDropTimer.current = setTimeout(() => recentDropPaths.current.clear(), 500);
         try {
-          const bytes = await readFile(imagePath);
-          const ext = imagePath.split(".").pop().toLowerCase();
-          const filename = imagePath.replace(/\\/g, "/").split("/").pop();
-          const blob = new Blob([bytes], { type: MIME[ext] || "image/png" });
-          setPendingFiles((prev) => [...prev, new File([blob], filename, { type: blob.type })]);
+          const newFiles = await Promise.all(
+            newPaths.map(async (imagePath) => {
+              const bytes = await readFile(imagePath);
+              const ext = imagePath.split(".").pop().toLowerCase();
+              const filename = imagePath.replace(/\\/g, "/").split("/").pop();
+              const blob = new Blob([bytes], { type: MIME[ext] || "image/png" });
+              return new File([blob], filename, { type: blob.type });
+            })
+          );
+          setPendingFiles((prev) => [...prev, ...newFiles]);
           setAddOverlayOpen(true);
         } catch (e) { console.error("Failed to read dragged file:", e); }
       });
+      // If cleanup already ran before promises resolved, unregister immediately
+      if (cancelled) { unlistenHover?.(); unlistenLeave?.(); unlistenDrop?.(); }
     })();
-    return () => { unlistenHover?.(); unlistenDrop?.(); unlistenLeave?.(); };
+    return () => { cancelled = true; unlistenHover?.(); unlistenDrop?.(); unlistenLeave?.(); };
   }, []);
 
   useEffect(() => {
@@ -259,26 +271,6 @@ export default function App() {
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup",   onUp);
   }, [sidebarWidth]);
-
-  // ── Panel resize ─────────────────────────────────────────────────────────────
-
-  const handlePanelResizeStart = useCallback((e) => {
-    e.preventDefault();
-    const startX     = e.clientX;
-    const startWidth = panelWidth;
-    const onMove = (ev) => {
-      // Panel is on the right — dragging left makes it wider
-      const w = Math.min(560, Math.max(260, startWidth - (ev.clientX - startX)));
-      setPanelWidth(w);
-      localStorage.setItem("compendie_panel_width", w);
-    };
-    const onUp = () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup",   onUp);
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup",   onUp);
-  }, [panelWidth]);
 
   // ── Context menus ────────────────────────────────────────────────────────────
 
@@ -458,13 +450,13 @@ export default function App() {
         {selectedItem && pendingFiles.length === 0 && (
           <DetailPanel
             item={selectedItem}
-            imageUrl={imageUrls[selectedItem.id]}
+            allItems={filtered}
+            imageUrls={imageUrls}
             collections={collections}
             onUpdate={handleUpdate}
             onDelete={handleDelete}
             onClose={() => setSelectedItem(null)}
-            width={panelWidth}
-            onResizeStart={handlePanelResizeStart}
+            onNavigate={setSelectedItem}
           />
         )}
       </div>
