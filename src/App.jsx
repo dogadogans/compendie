@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { arrayMove } from "@dnd-kit/sortable";
@@ -333,11 +333,10 @@ export default function App() {
     return ids;
   }, [collections]);
 
-  const filtered = items.filter((item) => {
+  const filtered = useMemo(() => items.filter((item) => {
     if (activeView.type === "unorganized" && item.collections.length > 0) return false;
     if (activeView.type === "collection") {
-      const ids = getDescendantIds(activeView.id);
-      if (!item.collections.some((cid) => ids.has(cid))) return false;
+      if (!item.collections.includes(activeView.id)) return false;
     }
     if (activeView.type === "tag" && !item.tags.includes(activeView.tag)) return false;
     if (!search.trim()) return true;
@@ -347,7 +346,7 @@ export default function App() {
       item.tags.some((t) => t.includes(q))  ||
       item.note.toLowerCase().includes(q)
     );
-  });
+  }), [items, activeView, search]);
 
   return (
     <div className="app"
@@ -375,12 +374,15 @@ export default function App() {
       <div className="main-area">
         <Grid
           items={filtered}
+          allItems={items}
+          collections={collections}
           imageUrls={imageUrls}
           search={search}
           onSearch={setSearch}
           activeView={activeView}
           onCardClick={handleCardClick}
           onCardContextMenu={handleCardContextMenu}
+          onSelectCollection={(id) => setActiveView({ type: "collection", id })}
           isDragging={isDragging}
           onReorder={handleReorder}
         />

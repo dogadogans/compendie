@@ -24,12 +24,15 @@ function loadZoom() {
 
 export default function Grid({
   items,
+  allItems = [],
+  collections = [],
   imageUrls,
   search,
   onSearch,
   activeView,
   onCardClick,
   onCardContextMenu,
+  onSelectCollection,
   isDragging,
   onReorder,
 }) {
@@ -95,11 +98,24 @@ export default function Grid({
   }, []);
 
   const inCollection = activeView?.type === "collection";
-  const imageItems = inCollection ? items.filter(i => i.type === "image") : items;
-  const flowItems  = inCollection ? items.filter(i => i.type === "flow")  : items;
-  const visibleItems = inCollection
-    ? (activeTab === "images" ? imageItems : flowItems)
-    : items;
+
+  const subCollections = useMemo(
+    () => inCollection ? collections.filter(c => c.parent_id === activeView.id && !c.archived) : [],
+    [inCollection, collections, activeView]
+  );
+
+  const imageItems = useMemo(
+    () => inCollection ? items.filter(i => i.type === "image") : items,
+    [items, inCollection]
+  );
+  const flowItems = useMemo(
+    () => inCollection ? items.filter(i => i.type === "flow") : items,
+    [items, inCollection]
+  );
+  const visibleItems = useMemo(
+    () => inCollection ? (activeTab === "images" ? imageItems : flowItems) : items,
+    [inCollection, activeTab, imageItems, flowItems, items]
+  );
 
   // Live reorder preview: as you drag over a card, the array shifts so masonry
   // re-lays cards into their new positions with a smooth CSS transition.
@@ -137,6 +153,20 @@ export default function Grid({
           onChange={(e) => changeZoom(parseInt(e.target.value, 10))}
           title="Zoom (or Ctrl+scroll)"
         />
+        {subCollections.length > 0 && (
+          <div className="subfolder-row">
+            {subCollections.map(col => {
+              const count = allItems.filter(i => i.collections.includes(col.id)).length;
+              return (
+                <div key={col.id} className="subfolder-card" onClick={() => onSelectCollection(col.id)}>
+                  <span className="subfolder-icon">{col.icon || "📁"}</span>
+                  <span className="subfolder-name">{col.name}</span>
+                  <span className="subfolder-count">{count}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
         {inCollection && (
           <div className="collection-tabs">
             <button
