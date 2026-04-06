@@ -307,6 +307,30 @@ html, body, #root { height: 100%; overflow: hidden; }
 .search-input::placeholder { color: var(--muted); }
 .search-input:focus { border-color: var(--focus-border); }
 
+/* ── Zoom slider ─────────────────────────────────────────────────────────── */
+.zoom-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 90px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--grey-200);
+  outline: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--grey-700);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.zoom-slider:hover::-webkit-slider-thumb { background: var(--text); }
+
 .btn-add {
   all: unset;
   cursor: pointer;

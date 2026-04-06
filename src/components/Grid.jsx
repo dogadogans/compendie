@@ -1,12 +1,26 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   DndContext, DragOverlay, PointerSensor,
   useSensor, useSensors, closestCenter,
 } from "@dnd-kit/core";
-import { SortableContext } from "@dnd-kit/sortable";
+import { SortableContext, arrayMove } from "@dnd-kit/sortable";
 import FlowCard from "./FlowCard";
 import SortableCard from "./SortableCard";
 import useMasonryLayout from "../hooks/useMasonryLayout";
+
+const ZOOM_MIN = 150;
+const ZOOM_MAX = 500;
+const ZOOM_STEP = 20;
+const ZOOM_DEFAULT = 220;
+
+function clampZoom(v) {
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v));
+}
+
+function loadZoom() {
+  const saved = parseInt(localStorage.getItem("tome-zoom"), 10);
+  return isNaN(saved) ? ZOOM_DEFAULT : clampZoom(saved);
+}
 
 export default function Grid({
   items,
@@ -14,9 +28,6 @@ export default function Grid({
   search,
   onSearch,
   activeView,
-  selectedIds,
-  onSelectionChange,
-  onSelectionDragStart,
   onCardClick,
   onCardContextMenu,
   isDragging,
@@ -24,23 +35,37 @@ export default function Grid({
 }) {
   const [activeTab, setActiveTab] = useState("images");
   const [activeId, setActiveId] = useState(null);
+  const [overId, setOverId] = useState(null);
+  const [zoom, setZoom] = useState(loadZoom);
+  const [isZooming, setIsZooming] = useState(false);
+  const zoomTimerRef = useRef(null);
+
+  function changeZoom(newZoom) {
+    const v = clampZoom(newZoom);
+    setZoom(v);
+    localStorage.setItem("tome-zoom", v);
+    setIsZooming(true);
+    clearTimeout(zoomTimerRef.current);
+    zoomTimerRef.current = setTimeout(() => setIsZooming(false), 300);
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { delay: 150, tolerance: 5 },
+      activationConstraint: { distance: 8 },
     })
   );
 
   function handleDragStart({ active }) {
-    // If dragging an unselected card while selection exists, clear selection first
-    if (selectedIdsRef.current.size > 0 && !selectedIdsRef.current.has(active.id)) {
-      onSelectionChange(new Set());
-    }
     setActiveId(active.id);
+  }
+
+  function handleDragOver({ over }) {
+    setOverId(over?.id ?? null);
   }
 
   function handleDragEnd({ active, over }) {
     setActiveId(null);
+    setOverId(null);
     if (!over || active.id === over.id) return;
     onReorder(active.id, over.id);
   }
@@ -50,101 +75,24 @@ export default function Grid({
     setActiveTab("images");
   }, [activeView]);
 
-  const gridRef    = useRef(null);  // attached to the grid-area div
-  const rbOverlay  = useRef(null);  // the rubber band rectangle div
-  const selectedIdsRef = useRef(selectedIds);
-  useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
-
+  // Ctrl+wheel → zoom in/out (like Photoshop)
   useEffect(() => {
-    const grid = gridRef.current;
-    if (!grid) return;
-
-    let rbStartX = 0, rbStartY = 0, rbActive = false;
-
-    const onMouseMove = (e) => {
-      const dx = e.clientX - rbStartX;
-      const dy = e.clientY - rbStartY;
-      if (!rbActive && Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
-      rbActive = true;
-
-      const left = Math.min(e.clientX, rbStartX);
-      const top  = Math.min(e.clientY, rbStartY);
-      const w    = Math.abs(dx);
-      const h    = Math.abs(dy);
-
-      if (rbOverlay.current) {
-        rbOverlay.current.style.display = "block";
-        rbOverlay.current.style.left    = `${left}px`;
-        rbOverlay.current.style.top     = `${top}px`;
-        rbOverlay.current.style.width   = `${w}px`;
-        rbOverlay.current.style.height  = `${h}px`;
-      }
-
-      const rbRect = { left, top, right: left + w, bottom: top + h };
-      const cards  = grid.querySelectorAll("[data-item-id]");
-      const hits   = new Set();
-      cards.forEach((card) => {
-        const r = card.getBoundingClientRect();
-        if (r.left < rbRect.right && r.right > rbRect.left &&
-            r.top  < rbRect.bottom && r.bottom > rbRect.top) {
-          hits.add(card.dataset.itemId);
-        }
+    const onWheel = (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      // deltaY > 0 = scroll down = zoom out (smaller images)
+      setZoom((prev) => {
+        const next = clampZoom(prev - Math.sign(e.deltaY) * ZOOM_STEP);
+        localStorage.setItem("tome-zoom", next);
+        return next;
       });
-      onSelectionChange(hits);
+      setIsZooming(true);
+      clearTimeout(zoomTimerRef.current);
+      zoomTimerRef.current = setTimeout(() => setIsZooming(false), 300);
     };
-
-    const onMouseUp = () => {
-      if (rbOverlay.current) rbOverlay.current.style.display = "none";
-      if (rbActive) {
-        // Suppress the click that fires after mouseup on a card.
-        // We check rbActive *before* resetting it. The capture-phase listener
-        // runs before React's synthetic event system, so stopPropagation here
-        // prevents the card's onClick from ever firing. Self-removes after one use.
-        const suppressClick = (ev) => {
-          ev.stopPropagation();
-          window.removeEventListener("click", suppressClick, true);
-        };
-        window.addEventListener("click", suppressClick, true);
-      }
-      rbActive = false;
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup",   onMouseUp);
-    };
-
-    const onMouseDown = (e) => {
-      if (e.button !== 0) return;
-
-      // If mousedown on a selected card → start drag (Task 3)
-      const cardEl = e.target.closest("[data-item-id]");
-      if (cardEl && selectedIdsRef.current.has(cardEl.dataset.itemId)) {
-        e.preventDefault(); // prevent browser native image drag stealing mouse events
-        onSelectionDragStart();
-        return;
-      }
-
-      // If mousedown on any card → normal click, just clear selection
-      if (cardEl) {
-        onSelectionChange(new Set());
-        return;
-      }
-
-      // Background mousedown → start rubber band
-      rbStartX  = e.clientX;
-      rbStartY  = e.clientY;
-      rbActive  = false;
-      onSelectionChange(new Set());
-
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup",   onMouseUp);
-    };
-
-    grid.addEventListener("mousedown", onMouseDown);
-    return () => {
-      grid.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup",   onMouseUp);
-    };
-  }, [onSelectionChange, onSelectionDragStart]);
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => window.removeEventListener("wheel", onWheel);
+  }, []);
 
   const inCollection = activeView?.type === "collection";
   const imageItems = inCollection ? items.filter(i => i.type === "image") : items;
@@ -153,14 +101,24 @@ export default function Grid({
     ? (activeTab === "images" ? imageItems : flowItems)
     : items;
 
-  const { positions, containerHeight, columnWidth, containerRef: masonryRef } =
-    useMasonryLayout(visibleItems);
+  // Live reorder preview: as you drag over a card, the array shifts so masonry
+  // re-lays cards into their new positions with a smooth CSS transition.
+  const liveItems = useMemo(() => {
+    if (!activeId || !overId || activeId === overId) return visibleItems;
+    const oldIndex = visibleItems.findIndex(i => i.id === activeId);
+    const newIndex = visibleItems.findIndex(i => i.id === overId);
+    if (oldIndex === -1 || newIndex === -1) return visibleItems;
+    return arrayMove(visibleItems, oldIndex, newIndex);
+  }, [activeId, overId, visibleItems]);
+
+  const { positions, containerHeight, columnWidth, containerRef: masonryRef, recalculate } =
+    useMasonryLayout(liveItems, zoom);
+
 
   const activeItem = activeId ? items.find((i) => i.id === activeId) : null;
 
   return (
-    <div className="grid-area" ref={gridRef}>
-      <div ref={rbOverlay} className="rubber-band" style={{ display: "none" }} />
+    <div className="grid-area">
       <header className="toolbar">
         <input
           className="search-input"
@@ -168,6 +126,16 @@ export default function Grid({
           placeholder="Search…"
           value={search}
           onChange={(e) => onSearch(e.target.value)}
+        />
+        <input
+          className="zoom-slider"
+          type="range"
+          min={ZOOM_MIN}
+          max={ZOOM_MAX}
+          step={ZOOM_STEP}
+          value={zoom}
+          onChange={(e) => changeZoom(parseInt(e.target.value, 10))}
+          title="Zoom (or Ctrl+scroll)"
         />
         {inCollection && (
           <div className="collection-tabs">
@@ -199,7 +167,7 @@ export default function Grid({
                       onClick={() => onCardClick(flow)}
                     >
                       {imageUrls[screen.id]
-                        ? <img src={imageUrls[screen.id]} alt="" />
+                        ? <img src={imageUrls[screen.id]} alt="" draggable={false} onLoad={recalculate} />
                         : <div className="card-placeholder" />}
                     </div>
                   ))}
@@ -221,16 +189,17 @@ export default function Grid({
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
         >
-          <SortableContext items={visibleItems.map((i) => i.id)}>
+          <SortableContext items={liveItems.map((i) => i.id)}>
             <div
               ref={(el) => { masonryRef.current = el; }}
               className={`grid${isDragging ? " drop-active" : ""}`}
               style={{ height: containerHeight || undefined }}
             >
               {isDragging && <div className="grid-drop-overlay"><span>Drop to save</span></div>}
-              {visibleItems.map((item) => {
+              {liveItems.map((item) => {
                 const pos = positions[item.id];
                 const cardStyle = pos
                   ? { position: "absolute", left: pos.x, top: pos.y, width: pos.width }
@@ -245,12 +214,12 @@ export default function Grid({
                       key={item.id}
                       id={item.id}
                       style={cardStyle}
-                      disabled={selectedIds?.has(item.id)}
+                      isGridDragging={!!activeId}
+                      isZooming={isZooming}
                     >
                       <FlowCard
                         item={item}
                         imageUrl={firstScreenUrl}
-                        selected={selectedIds?.has(item.id)}
                         onClick={() => onCardClick(item)}
                         onContextMenu={onCardContextMenu}
                       />
@@ -263,17 +232,17 @@ export default function Grid({
                     key={item.id}
                     id={item.id}
                     style={cardStyle}
-                    disabled={selectedIds?.has(item.id)}
+                    isGridDragging={!!activeId}
                   >
                     <div
                       data-item-id={item.id}
-                      className={`card${selectedIds?.has(item.id) ? " selected" : ""}`}
+                      className="card"
                       onClick={() => onCardClick(item)}
                       onContextMenu={(e) => { e.preventDefault(); onCardContextMenu(e, item); }}
                       title={item.title || undefined}
                     >
                       {imageUrls[item.id]
-                        ? <img src={imageUrls[item.id]} alt={item.title || "image"} loading="lazy" />
+                        ? <img src={imageUrls[item.id]} alt={item.title || "image"} loading="lazy" draggable={false} onLoad={recalculate} />
                         : <div className="card-placeholder" />}
                     </div>
                   </SortableCard>
@@ -308,6 +277,7 @@ export default function Grid({
                           src={imageUrls[activeItem.id]}
                           alt={activeItem.title || "image"}
                           style={{ display: "block", width: "100%", height: "auto" }}
+                          draggable={false}
                         />
                       : <div className="card-placeholder" />}
                   </div>
