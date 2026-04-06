@@ -21,8 +21,14 @@ async function loadData() {
   await ensureDirs();
   if (!(await exists(DATA_FILE, { baseDir: BaseDirectory.Home })))
     return { collections: [], items: [] };
-  const raw    = await readTextFile(DATA_FILE, { baseDir: BaseDirectory.Home });
-  const parsed = JSON.parse(raw);
+  const raw = await readTextFile(DATA_FILE, { baseDir: BaseDirectory.Home });
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    console.warn("data.json is corrupted, starting fresh:", e);
+    return { collections: [], items: [] };
+  }
   // Old formats (plain array or folders-based) → start fresh
   if (Array.isArray(parsed) || parsed.folders !== undefined)
     return { collections: [], items: [] };

@@ -31,9 +31,6 @@ export default function App() {
   const [addOverlayOpen,  setAddOverlayOpen]  = useState(false);
   const [isDragging,      setIsDragging]      = useState(false);
   const [ctxMenu,      setCtxMenu]      = useState(null);
-  const [selectedIds,        setSelectedIds]        = useState(new Set());
-  const selectedIdsRef = useRef(new Set());
-  useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
   // null | { mode: "create" } | { mode: "edit", flow: object }
   const [flowBuilder, setFlowBuilder] = useState(null);
   // null | flow-item object
@@ -41,8 +38,6 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(
     () => parseInt(localStorage.getItem("compendie_sidebar_width") || "240")
   );
-  const ghostRef    = useRef(null);  // direct DOM ref — updated without React re-renders
-  const dragColRef  = useRef(null);  // current hovered collection id during drag
   const itemsRef    = useRef(items); // always-current items for use in stable callbacks
   useEffect(() => { itemsRef.current = items; }, [items]);
   const dragCounter     = useRef(0);
@@ -133,17 +128,6 @@ export default function App() {
     return () => { cancelled = true; unlistenHover?.(); unlistenDrop?.(); unlistenLeave?.(); };
   }, []);
 
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if (e.key !== "Escape") return;
-      // Don't clear selection if the user is typing in an input or textarea
-      const tag = document.activeElement?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-      setSelectedIds(new Set());
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
 
   const handleDragEnter = useCallback((e) => { e.preventDefault(); }, []);
   const handleDragOver  = useCallback((e) => { e.preventDefault(); }, []);
@@ -340,57 +324,6 @@ export default function App() {
     ]);
   };
 
-  const handleSelectionDragStart = useCallback(() => {
-    // Show ghost — DOM-only, no React state
-    if (ghostRef.current) {
-      ghostRef.current.textContent = `+${selectedIdsRef.current.size}`;
-      ghostRef.current.style.display = "block";
-    }
-
-    let prevColEl = null; // sidebar element currently highlighted
-
-    const onMove = (e) => {
-      // Move ghost — no setState, no re-render
-      if (ghostRef.current) {
-        ghostRef.current.style.left = `${e.clientX + 12}px`;
-        ghostRef.current.style.top  = `${e.clientY + 12}px`;
-      }
-
-      // Highlight sidebar target — direct DOM class toggle, no setState
-      const el    = document.elementFromPoint(e.clientX, e.clientY);
-      const colEl = el?.closest("[data-collection-id]") ?? null;
-      if (colEl !== prevColEl) {
-        prevColEl?.classList.remove("drag-target");
-        colEl?.classList.add("drag-target");
-        prevColEl = colEl;
-      }
-      dragColRef.current = colEl?.dataset?.collectionId ?? null;
-    };
-
-    const onUp = () => {
-      if (ghostRef.current) ghostRef.current.style.display = "none";
-      prevColEl?.classList.remove("drag-target");
-      prevColEl = null;
-
-      const colId = dragColRef.current;
-      if (colId) {
-        selectedIdsRef.current.forEach((id) => {
-          const item = itemsRef.current.find((i) => i.id === id);
-          if (!item) return;
-          if (!item.collections.includes(colId)) {
-            handleUpdate(id, { collections: [...item.collections, colId] });
-          }
-        });
-      }
-      setSelectedIds(new Set());
-      dragColRef.current = null;
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup",   onUp);
-    };
-
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup",   onUp);
-  }, [handleUpdate]); // zero React state reads in hot path
 
   // ── Filtering ────────────────────────────────────────────────────────────────
 
@@ -446,9 +379,6 @@ export default function App() {
           search={search}
           onSearch={setSearch}
           activeView={activeView}
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-          onSelectionDragStart={handleSelectionDragStart}
           onCardClick={handleCardClick}
           onCardContextMenu={handleCardContextMenu}
           isDragging={isDragging}
@@ -474,7 +404,6 @@ export default function App() {
         )}
       </div>
 
-      <div ref={ghostRef} className="drag-ghost" style={{ display: "none" }} />
 
       {ctxMenu && (
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.menuItems}

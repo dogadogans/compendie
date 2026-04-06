@@ -1,9 +1,9 @@
 import { useState, useLayoutEffect, useEffect, useRef, useCallback } from "react";
 
-const GAP = 12;          // matches the old column-gap
-const MIN_COL_WIDTH = 180; // matches the old `columns: 4 180px`
+const GAP = 12;      // matches the old column-gap
+const PADDING = 20;  // matches .grid padding
 
-export default function useMasonryLayout(items) {
+export default function useMasonryLayout(items, minColWidth = 180) {
   const containerRef = useRef(null);
   const itemsRef     = useRef(items);
   useEffect(() => { itemsRef.current = items; }, [items]);
@@ -11,18 +11,23 @@ export default function useMasonryLayout(items) {
   const [layout, setLayout] = useState({
     positions: {},
     containerHeight: 0,
-    columnWidth: MIN_COL_WIDTH,
+    columnWidth: minColWidth,
   });
+
+  // Keep minColWidth accessible inside the stable recalculate callback
+  const minColWidthRef = useRef(minColWidth);
+  useEffect(() => { minColWidthRef.current = minColWidth; }, [minColWidth]);
 
   const recalculate = useCallback((currentItems) => {
     const container = containerRef.current;
     if (!container) return;
 
-    // clientWidth includes padding (20px each side), so subtract 40 for usable width
-    const usable = container.clientWidth - 40;
+    // clientWidth includes padding (PADDING px each side), so subtract 2*PADDING for usable width
+    const usable = container.clientWidth - PADDING * 2;
     if (usable <= 0) return;
 
-    const colCount   = Math.max(1, Math.floor((usable + GAP) / (MIN_COL_WIDTH + GAP)));
+    const mcw      = minColWidthRef.current;
+    const colCount   = Math.max(1, Math.floor((usable + GAP) / (mcw + GAP)));
     const colWidth   = (usable - GAP * (colCount - 1)) / colCount;
     const colHeights = Array(colCount).fill(0);
     const positions  = {};
@@ -32,8 +37,8 @@ export default function useMasonryLayout(items) {
       if (!card) return;
       const col = colHeights.indexOf(Math.min(...colHeights));
       positions[item.id] = {
-        x: col * (colWidth + GAP),
-        y: colHeights[col],
+        x: PADDING + col * (colWidth + GAP),
+        y: PADDING + colHeights[col],
         width: colWidth,
       };
       colHeights[col] += card.offsetHeight + GAP;
@@ -41,7 +46,7 @@ export default function useMasonryLayout(items) {
 
     setLayout({
       positions,
-      containerHeight: colHeights.length > 0 ? Math.max(...colHeights) : 0,
+      containerHeight: colHeights.length > 0 ? Math.max(...colHeights) + PADDING * 2 : 0,
       columnWidth: colWidth,
     });
   }, []);
@@ -50,6 +55,15 @@ export default function useMasonryLayout(items) {
   useLayoutEffect(() => {
     recalculate(items);
   }, [items, recalculate]);
+
+  // Re-run when zoom changes — needs two passes:
+  // Pass 1: compute new column count/width so React renders cards at new widths.
+  // Pass 2 (after RAF): DOM has settled at new widths, remeasure actual card heights.
+  useEffect(() => {
+    recalculate(itemsRef.current);
+    const id = requestAnimationFrame(() => recalculate(itemsRef.current));
+    return () => cancelAnimationFrame(id);
+  }, [minColWidth, recalculate]);
 
   // Re-run on container resize
   useEffect(() => {
@@ -60,5 +74,7 @@ export default function useMasonryLayout(items) {
     return () => ro.disconnect();
   }, [recalculate]);
 
-  return { ...layout, containerRef };
+  const recalculateNow = useCallback(() => recalculate(itemsRef.current), [recalculate]);
+
+  return { ...layout, containerRef, recalculate: recalculateNow };
 }
