@@ -179,12 +179,13 @@ export async function loadCollections() {
   return (await loadData()).collections;
 }
 
-export async function addCollection({ name, icon = "📁", parentId = null }) {
+export async function addCollection({ name, icon = "Folder", color = "#f0b429", parentId = null }) {
   const data       = await loadData();
   const collection = {
     id:         uuidv4(),
     name,
     icon,
+    color,
     parent_id:  parentId,
     archived:   false,
     created_at: new Date().toISOString(),
@@ -198,9 +199,27 @@ export async function updateCollection(id, changes) {
   const data = await loadData();
   const idx  = data.collections.findIndex((c) => c.id === id);
   if (idx === -1) throw new Error("Collection not found");
-  data.collections[idx] = { ...data.collections[idx], ...changes };
+  data.collections[idx] = {
+    ...data.collections[idx],
+    ...changes,
+    updated_at: new Date().toISOString(),
+  };
   await saveData(data);
   return data.collections[idx];
+}
+
+export async function reorderCollections(newOrderedIds) {
+  const data = await loadData();
+  const colMap = new Map(data.collections.map((c) => [c.id, c]));
+  const reordered = newOrderedIds
+    .filter((id) => colMap.has(id))
+    .map((id) => colMap.get(id));
+  if (reordered.length !== data.collections.length) {
+    console.warn("reorderCollections: ID count mismatch, aborting save");
+    return;
+  }
+  data.collections = reordered;
+  await saveData(data);
 }
 
 export async function archiveCollection(id) {
