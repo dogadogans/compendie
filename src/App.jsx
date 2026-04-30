@@ -5,7 +5,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import {
   loadItems, addItem, updateItem, deleteItem, getImageUrl,
   loadCollections, addCollection, updateCollection, deleteCollection, archiveCollection,
-  addFlow, updateFlow, reorderItems,
+  addFlow, updateFlow, reorderItems, reorderCollections,
 } from "./store";
 import AddOverlay from "./components/AddOverlay";
 import ContextMenu from "./components/ContextMenu";
@@ -14,6 +14,7 @@ import Grid from "./components/Grid";
 import DetailPanel from "./components/DetailPanel";
 import FlowBuilder from "./components/FlowBuilder";
 import FlowDetail from "./components/FlowDetail";
+import CreateCollectionModal from "./components/CreateCollectionModal";
 import "./App.css";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif"];
@@ -31,6 +32,7 @@ export default function App() {
   const [addOverlayOpen,  setAddOverlayOpen]  = useState(false);
   const [isDragging,      setIsDragging]      = useState(false);
   const [ctxMenu,      setCtxMenu]      = useState(null);
+  const [editingCollection, setEditingCollection] = useState(null);
   // null | { mode: "create" } | { mode: "edit", flow: object }
   const [flowBuilder, setFlowBuilder] = useState(null);
   // null | flow-item object
@@ -137,8 +139,8 @@ export default function App() {
   const handleSaveNew = async (dataList) => {
     const saved = await Promise.all(
       dataList.map((data) => {
-        const collectionIds = data.collectionId
-          ? [data.collectionId]
+        const collectionIds = data.collectionIds?.length
+          ? data.collectionIds
           : activeView.type === "collection" ? [activeView.id] : [];
         return addItem({ ...data, collections: collectionIds });
       })
@@ -215,13 +217,14 @@ export default function App() {
 
   // ── Collection handlers ──────────────────────────────────────────────────────
 
-  const handleAddCollection = async ({ name, icon, parentId }) => {
-    const col = await addCollection({ name, icon, parentId });
+  const handleAddCollection = async ({ name, icon, color, parentId }) => {
+    const col = await addCollection({ name, icon, color, parentId });
     setCollections((prev) => [...prev, col]);
+    return col;
   };
 
-  const handleRenameCollection = async (id, name) => {
-    const updated = await updateCollection(id, { name });
+  const handleUpdateCollection = async (id, { name, icon, color }) => {
+    const updated = await updateCollection(id, { name, icon, color });
     setCollections((prev) => prev.map((c) => (c.id === id ? updated : c)));
   };
 
@@ -333,6 +336,11 @@ export default function App() {
     return ids;
   }, [collections]);
 
+  const allTags = useMemo(
+    () => [...new Set(items.flatMap((i) => i.tags))].sort(),
+    [items]
+  );
+
   const filtered = useMemo(() => items.filter((item) => {
     if (activeView.type === "unorganized" && item.collections.length > 0) return false;
     if (activeView.type === "collection") {
@@ -364,7 +372,6 @@ export default function App() {
         onSelectCollection={(id) => setActiveView({ type: "collection", id })}
         onSelectTag={(tag) => setActiveView({ type: "tag", tag })}
         onAddCollection={handleAddCollection}
-        onRenameCollection={handleRenameCollection}
         onContextMenu={handleCollectionContextMenu}
         onAddClick={() => setAddOverlayOpen(true)}
         width={sidebarWidth}
@@ -398,6 +405,7 @@ export default function App() {
             allItems={filtered}
             imageUrls={imageUrls}
             collections={collections}
+            allTags={allTags}
             onUpdate={handleUpdate}
             onDelete={handleDelete}
             onClose={() => setSelectedItem(null)}
@@ -412,16 +420,30 @@ export default function App() {
           onClose={() => setCtxMenu(null)} />
       )}
 
+      {editingCollection && (
+        <CreateCollectionModal
+          title="Edit Collection"
+          initialData={editingCollection}
+          onSave={async ({ name, icon, color }) => {
+            await handleUpdateCollection(editingCollection.id, { name, icon, color });
+            setEditingCollection(null);
+          }}
+          onClose={() => setEditingCollection(null)}
+        />
+      )}
+
       {(addOverlayOpen || pendingFiles.length > 0) && (
         <AddOverlay
           imageFiles={pendingFiles}
           collections={collections.filter((c) => !c.archived)}
+          allTags={allTags}
           onSave={handleSaveNew}
           onSaveFlow={handleSaveNewFlow}
           onCancel={() => { setPendingFiles([]); setAddOverlayOpen(false); }}
           onRemoveFile={(i) => setPendingFiles((prev) => prev.filter((_, idx) => idx !== i))}
           onReorderFiles={setPendingFiles}
           onAddFiles={(files) => setPendingFiles((prev) => [...prev, ...files])}
+          onCreateCollection={(data) => handleAddCollection({ ...data, parentId: null })}
         />
       )}
 
