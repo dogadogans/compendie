@@ -1,6 +1,27 @@
 import { useState, useMemo } from "react";
 import * as Icons from "lucide-react";
 import CreateCollectionModal from "./CreateCollectionModal";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+function SortableCollectionRow({ col, disabled, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: col.id, disabled });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+      }}
+      {...(disabled ? {} : { ...attributes, ...listeners })}
+    >
+      {children}
+    </div>
+  );
+}
 
 // Renders a Lucide icon for a collection, falls back to emoji for old data.
 function ColIcon({ icon, color, size = 14 }) {
@@ -56,6 +77,19 @@ export default function Sidebar({
   const archived    = collections.filter((c) => c.archived);
   const getChildren = (pid) => collections.filter((c) => c.parent_id === pid && !c.archived);
   const unorganized = items.filter((i) => i.collections.length === 0).length;
+
+  const isManual = !collectionSort || collectionSort.by === "manual";
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  const handleDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return;
+    const oldIndex = topLevel.findIndex((c) => c.id === active.id);
+    const newIndex  = topLevel.findIndex((c) => c.id === over.id);
+    onReorderCollections(arrayMove(topLevel, oldIndex, newIndex).map((c) => c.id));
+  };
 
   const handleModalSave = async ({ name, icon, color }) => {
     await onAddCollection({ name, icon, color, parentId: null });
@@ -142,7 +176,22 @@ export default function Sidebar({
             <span>Collections</span>
             <button className="section-add-btn" onClick={() => setModalOpen(true)}>+</button>
           </div>
-          {topLevel.map((col) => renderCollection(col))}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={topLevel.map((c) => c.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {topLevel.map((col) => (
+                <SortableCollectionRow key={col.id} col={col} disabled={!isManual}>
+                  {renderCollection(col)}
+                </SortableCollectionRow>
+              ))}
+            </SortableContext>
+          </DndContext>
         </div>
 
         {/* Tags */}
