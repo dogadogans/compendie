@@ -20,6 +20,35 @@ import "./App.css";
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif"];
 const MIME = { png:"image/png", jpg:"image/jpeg", jpeg:"image/jpeg", gif:"image/gif", webp:"image/webp", bmp:"image/bmp", avif:"image/avif" };
 
+// ─── Sort menu builder ────────────────────────────────────────────────────────
+function buildSortMenuItems(sort, onSortChange) {
+  const mk = (by, label) => {
+    const isActive = sort.by === by;
+    return {
+      icon: isActive ? "✓" : " ",
+      label,
+      hint: isActive ? (sort.dir === "asc" ? "↑" : "↓") : "",
+      action: () =>
+        onSortChange(
+          isActive
+            ? { by, dir: sort.dir === "asc" ? "desc" : "asc" }
+            : { by, dir: "asc" }
+        ),
+    };
+  };
+  return [
+    {
+      icon: sort.by === "manual" ? "✓" : " ",
+      label: "Manual",
+      action: () => onSortChange({ by: "manual", dir: "asc" }),
+    },
+    "---",
+    mk("name", "Name"),
+    mk("date_created", "Date Created"),
+    mk("date_updated", "Date Updated"),
+  ];
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [items,        setItems]        = useState([]);
@@ -33,6 +62,16 @@ export default function App() {
   const [isDragging,      setIsDragging]      = useState(false);
   const [ctxMenu,      setCtxMenu]      = useState(null);
   const [editingCollection, setEditingCollection] = useState(null);
+  const [collectionSort, setCollectionSort] = useState(() => {
+    try {
+      return (
+        JSON.parse(localStorage.getItem("compendie_collection_sort")) ||
+        { by: "manual", dir: "asc" }
+      );
+    } catch {
+      return { by: "manual", dir: "asc" };
+    }
+  });
   // null | { mode: "create" } | { mode: "edit", flow: object }
   const [flowBuilder, setFlowBuilder] = useState(null);
   // null | flow-item object
@@ -252,6 +291,24 @@ export default function App() {
       setActiveView({ type: "all" });
   };
 
+  const handleSortChange = (newSort) => {
+    setCollectionSort(newSort);
+    localStorage.setItem("compendie_collection_sort", JSON.stringify(newSort));
+  };
+
+  const handleReorderCollections = useCallback((newTopLevelIds) => {
+    setCollections((prev) => {
+      const topSet = new Set(newTopLevelIds);
+      const rest = prev.filter((c) => !topSet.has(c.id));
+      const reordered = newTopLevelIds
+        .map((id) => prev.find((c) => c.id === id))
+        .filter(Boolean);
+      const next = [...reordered, ...rest];
+      reorderCollections(next.map((c) => c.id)).catch(console.error);
+      return next;
+    });
+  }, []);
+
   // ── Sidebar resize ───────────────────────────────────────────────────────────
 
   const handleSidebarResizeStart = useCallback((e) => {
@@ -277,10 +334,13 @@ export default function App() {
     setCtxMenu({ x: e.clientX, y: e.clientY, menuItems });
   };
 
-  const handleCollectionContextMenu = (e, collection, startRename) => {
+  const handleCollectionContextMenu = (e, collection) => {
     openCtxMenu(e, [
-      { icon: "✎", label: "Rename",  action: startRename },
+      { icon: "✎", label: "Edit…", action: () => setEditingCollection(collection) },
       { icon: "📦", label: "Archive", action: () => handleArchiveCollection(collection.id) },
+      { icon: "↕", label: "Sort by", hint: "▸",
+        action: () => openCtxMenu(e, buildSortMenuItems(collectionSort, handleSortChange)),
+      },
       "---",
       { icon: "🗑", label: "Delete", danger: true, action: () => handleDeleteCollection(collection.id) },
     ]);
@@ -373,6 +433,9 @@ export default function App() {
         onSelectTag={(tag) => setActiveView({ type: "tag", tag })}
         onAddCollection={handleAddCollection}
         onContextMenu={handleCollectionContextMenu}
+        collectionSort={collectionSort}
+        onSortChange={handleSortChange}
+        onReorderCollections={handleReorderCollections}
         onAddClick={() => setAddOverlayOpen(true)}
         width={sidebarWidth}
         onResizeStart={handleSidebarResizeStart}
