@@ -16,6 +16,7 @@ function SortableCollectionRow({ col, disabled, children }) {
         transition,
         opacity: isDragging ? 0.5 : 1,
       }}
+      {/* 5px activationConstraint on PointerSensor prevents drag on clicks — safe for desktop */}
       {...(disabled ? {} : { ...attributes, ...listeners })}
     >
       {children}
@@ -42,7 +43,6 @@ export default function Sidebar({
   onContextMenu,
   onAddClick,
   collectionSort,
-  onSortChange,
   onReorderCollections,
   width,
   onResizeStart,
@@ -110,7 +110,7 @@ export default function Sidebar({
     const isActive   = activeView.type === "collection" && activeView.id === col.id;
 
     return (
-      <div key={col.id}>
+      <div>
         <div
           data-collection-id={col.id}
           className={`nav-item collection-item${isActive ? " active" : ""}${isChild ? " sub-item" : ""}`}
