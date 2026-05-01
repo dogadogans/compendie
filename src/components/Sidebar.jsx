@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import * as Icons from "lucide-react";
-import { Hash } from "lucide-react";
 import CreateCollectionModal from "./CreateCollectionModal";
 
 // Renders a Lucide icon for a collection, falls back to emoji for old data.
@@ -170,7 +169,7 @@ export default function Sidebar({
                     className={`nav-item tag-nav-item${activeView.type === "tag" && activeView.tag === tag ? " active" : ""}`}
                     onClick={() => onSelectTag(tag)}
                   >
-                    <Hash size={12} className="tag-nav-icon" />
+                    <Icons.Hash size={12} className="tag-nav-icon" />
                     <span className="tag-nav-name">{tag}</span>
                     <span className="sidebar-count">{count}</span>
                   </button>
