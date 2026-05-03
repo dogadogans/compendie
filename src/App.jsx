@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { ExternalLink, FolderPlus, FolderMinus, Trash2 } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { arrayMove } from "@dnd-kit/sortable";
@@ -15,6 +16,11 @@ import DetailPanel from "./components/DetailPanel";
 import FlowBuilder from "./components/FlowBuilder";
 import FlowDetail from "./components/FlowDetail";
 import CreateCollectionModal from "./components/CreateCollectionModal";
+import DeleteConfirmModal from "./components/DeleteConfirmModal";
+import ActionsDropdown  from "./components/ActionsDropdown";
+import CollectionPicker from "./components/CollectionPicker";
+import QuickFolderModal from "./components/QuickFolderModal";
+import { AnimatePresence, motion } from "framer-motion";
 import "./App.css";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif"];
@@ -22,30 +28,22 @@ const MIME = { png:"image/png", jpg:"image/jpeg", jpeg:"image/jpeg", gif:"image/
 
 // ─── Sort menu builder ────────────────────────────────────────────────────────
 function buildSortMenuItems(sort, onSortChange) {
-  const mk = (by, label) => {
-    const isActive = sort.by === by;
-    return {
-      icon: isActive ? "✓" : " ",
-      label,
-      hint: isActive ? (sort.dir === "asc" ? "↑" : "↓") : "",
-      action: () =>
-        onSortChange(
-          isActive
-            ? { by, dir: sort.dir === "asc" ? "desc" : "asc" }
-            : { by, dir: "asc" }
-        ),
-    };
-  };
+  const opt = (by, dir, label) => ({
+    label,
+    checked: sort.by === by && sort.dir === dir,
+    action: () => onSortChange({ by, dir }),
+  });
   return [
-    {
-      icon: sort.by === "manual" ? "✓" : " ",
-      label: "Manual",
-      action: () => onSortChange({ by: "manual", dir: "asc" }),
-    },
+    { label: "Manual", checked: sort.by === "manual", action: () => onSortChange({ by: "manual", dir: "asc" }) },
     "---",
-    mk("name", "Name"),
-    mk("date_created", "Date Created"),
-    mk("date_updated", "Date Updated"),
+    opt("name", "asc",  "Name: A → Z"),
+    opt("name", "desc", "Name: Z → A"),
+    "---",
+    opt("date_created", "asc",  "Date Created: First"),
+    opt("date_created", "desc", "Date Created: Last"),
+    "---",
+    opt("date_updated", "asc",  "Date Updated: First"),
+    opt("date_updated", "desc", "Date Updated: Last"),
   ];
 }
 
@@ -62,6 +60,14 @@ export default function App() {
   const [isDragging,      setIsDragging]      = useState(false);
   const [ctxMenu,      setCtxMenu]      = useState(null);
   const [editingCollection, setEditingCollection] = useState(null);
+  const [newFolderParentId, setNewFolderParentId] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, name }
+  const [selectedIds,       setSelectedIds]       = useState(new Set());
+  const [organizeMode,      setOrganizeMode]       = useState(false);
+  const [actionMenuOpen,    setActionMenuOpen]     = useState(false);
+  const [pickerMode,        setPickerMode]         = useState(null); // "move" | "copy" | null
+  const [bulkDeleteConfirm, setBulkDeleteConfirm]  = useState(false);
+  const [quickFolderOpen,   setQuickFolderOpen]    = useState(false);
   const [collectionSort, setCollectionSort] = useState(() => {
     try {
       return (
@@ -72,12 +78,22 @@ export default function App() {
       return { by: "manual", dir: "asc" };
     }
   });
+  const [gridSort, setGridSort] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("compendie_grid_sort")) || { by: "manual", dir: "asc" };
+    } catch {
+      return { by: "manual", dir: "asc" };
+    }
+  });
   // null | { mode: "create" } | { mode: "edit", flow: object }
   const [flowBuilder, setFlowBuilder] = useState(null);
   // null | flow-item object
   const [flowDetail, setFlowDetail] = useState(null);
   const [sidebarWidth, setSidebarWidth] = useState(
     () => parseInt(localStorage.getItem("compendie_sidebar_width") || "240")
+  );
+  const [sidebarHidden, setSidebarHidden] = useState(
+    () => localStorage.getItem("compendie_sidebar_hidden") === "true"
   );
   const itemsRef    = useRef(items); // always-current items for use in stable callbacks
   useEffect(() => { itemsRef.current = items; }, [items]);
@@ -91,6 +107,14 @@ export default function App() {
     loadItems().then(setItems).catch(console.error);
     loadCollections().then(setCollections).catch(console.error);
   }, []);
+
+  // Reset selection state whenever the active view changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setOrganizeMode(false);
+    setActionMenuOpen(false);
+    setPickerMode(null);
+  }, [activeView]);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,6 +155,17 @@ export default function App() {
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.ctrlKey && e.key === "n") {
+        e.preventDefault();
+        setAddOverlayOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   useEffect(() => {
@@ -252,7 +287,73 @@ export default function App() {
       reorderItems(reordered.map((i) => i.id)).catch(console.error);
       return reordered;
     });
+    setGridSort((prev) => {
+      if (prev.by === "manual") return prev;
+      const next = { by: "manual", dir: "asc" };
+      localStorage.setItem("compendie_grid_sort", JSON.stringify(next));
+      return next;
+    });
   }, []);
+
+  const handleToggleSelect = useCallback((id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setOrganizeMode(false);
+    setActionMenuOpen(false);
+    setPickerMode(null);
+  }, []);
+
+  // Move selected items into targetId, removing them from the current collection
+  const handleBulkMove = useCallback(async (targetId) => {
+    const ids = [...selectedIds];
+    await Promise.all(ids.map((id) => {
+      const item = itemsRef.current.find((i) => i.id === id);
+      if (!item) return;
+      const next = item.collections
+        .filter((c) => c !== activeView.id)
+        .concat(item.collections.includes(targetId) ? [] : [targetId]);
+      return handleUpdate(id, { collections: next });
+    }));
+    handleClearSelection();
+  }, [selectedIds, activeView, handleUpdate, handleClearSelection]);
+
+  // Copy selected items into targetId without removing from current collection
+  const handleBulkCopy = useCallback(async (targetId) => {
+    const ids = [...selectedIds];
+    await Promise.all(ids.map((id) => {
+      const item = itemsRef.current.find((i) => i.id === id);
+      if (!item || item.collections.includes(targetId)) return;
+      return handleUpdate(id, { collections: [...item.collections, targetId] });
+    }));
+    handleClearSelection();
+  }, [selectedIds, handleUpdate, handleClearSelection]);
+
+  // Delete all selected items one by one
+  const handleBulkDelete = useCallback(async () => {
+    const ids = [...selectedIds];
+    for (const id of ids) await handleDelete(id);
+    handleClearSelection();
+  }, [selectedIds, handleDelete, handleClearSelection]);
+
+  // Create a new folder and move all selected items into it
+  const handleQuickNewFolder = useCallback(async (name) => {
+    const col = await handleAddCollection({ name, icon: "Folder", color: "#888888", parentId: activeView.id });
+    const ids = [...selectedIds];
+    await Promise.all(ids.map((id) => {
+      const item = itemsRef.current.find((i) => i.id === id);
+      if (!item) return;
+      return handleUpdate(id, { collections: [...item.collections, col.id] });
+    }));
+    setQuickFolderOpen(false);
+    handleClearSelection();
+  }, [selectedIds, activeView, handleAddCollection, handleUpdate, handleClearSelection]);
 
   // ── Collection handlers ──────────────────────────────────────────────────────
 
@@ -274,12 +375,15 @@ export default function App() {
       setActiveView({ type: "all" });
   };
 
-  const handleDeleteCollection = async (id) => {
+  const handleDeleteCollection = (id) => {
     const col = collections.find((c) => c.id === id);
-    const ok  = window.confirm(
-      `Delete "${col?.name}"? Your images won't be deleted — they'll stay in All and any other collections they belong to.`
-    );
-    if (!ok) return;
+    setDeleteConfirm({ id, name: col?.name ?? "" });
+  };
+
+  const confirmDeleteCollection = async () => {
+    if (!deleteConfirm) return;
+    const { id } = deleteConfirm;
+    setDeleteConfirm(null);
     await deleteCollection(id);
     const removedIds = new Set([id, ...collections.filter((c) => c.parent_id === id).map((c) => c.id)]);
     setCollections((prev) => prev.filter((c) => !removedIds.has(c.id)));
@@ -328,6 +432,14 @@ export default function App() {
     document.addEventListener("mouseup",   onUp);
   }, [sidebarWidth]);
 
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarHidden((prev) => {
+      const next = !prev;
+      localStorage.setItem("compendie_sidebar_hidden", next);
+      return next;
+    });
+  }, []);
+
   // ── Context menus ────────────────────────────────────────────────────────────
 
   const openCtxMenu = (e, menuItems) => {
@@ -336,13 +448,17 @@ export default function App() {
 
   const handleCollectionContextMenu = (e, collection) => {
     openCtxMenu(e, [
-      { icon: "✎", label: "Edit…", action: () => setEditingCollection(collection) },
-      { icon: "📦", label: "Archive", action: () => handleArchiveCollection(collection.id) },
-      { icon: "↕", label: "Sort by", hint: "▸",
+      ...(!collection.parent_id ? [{
+        label: "New folder",
+        action: () => setNewFolderParentId(collection.id),
+      }] : []),
+      { label: "Edit…", action: () => setEditingCollection(collection) },
+      { label: "Archive", action: () => handleArchiveCollection(collection.id) },
+      { label: "Sort by", submenu: true,
         action: () => openCtxMenu(e, buildSortMenuItems(collectionSort, handleSortChange)),
       },
       "---",
-      { icon: "🗑", label: "Delete", danger: true, action: () => handleDeleteCollection(collection.id) },
+      { label: "Delete", danger: true, action: () => handleDeleteCollection(collection.id) },
     ]);
   };
 
@@ -354,17 +470,17 @@ export default function App() {
   const handleCardContextMenu = (e, item) => {
     openCtxMenu(e, [
       {
-        icon: "↗", label: "Open details",
+        icon: ExternalLink, label: "Open details",
         action: () => item.type === "flow" ? setFlowDetail(item) : setSelectedItem(item),
       },
       "---",
       {
-        icon: "⤷", label: "Add to collection", action: () => {
+        icon: FolderPlus, label: "Add to collection", action: () => {
           const nonArchived = collections.filter((c) => !c.archived);
           setCtxMenu({
             x: e.clientX, y: e.clientY,
             menuItems: nonArchived.map((c) => ({
-              icon:  item.collections.includes(c.id) ? "✓" : " ",
+              checked: item.collections.includes(c.id),
               label: `${c.icon} ${c.name}`,
               action: () => {
                 const next = item.collections.includes(c.id)
@@ -377,13 +493,13 @@ export default function App() {
         },
       },
       ...(activeView.type === "collection" ? [{
-        icon: "✕", label: "Remove from collection", action: () =>
+        icon: FolderMinus, label: "Remove from collection", action: () =>
           handleUpdate(item.id, {
             collections: item.collections.filter((id) => id !== activeView.id),
           }),
       }] : []),
       "---",
-      { icon: "🗑", label: "Delete", danger: true, action: () => handleDelete(item.id) },
+      { icon: Trash2, label: "Delete", danger: true, action: () => handleDelete(item.id) },
     ]);
   };
 
@@ -416,6 +532,55 @@ export default function App() {
     );
   }), [items, activeView, search]);
 
+  const sortedFiltered = useMemo(() => {
+    if (gridSort.by === "manual") return filtered;
+    return [...filtered].sort((a, b) => {
+      let aVal, bVal;
+      if (gridSort.by === "name") {
+        aVal = (a.title || "").toLowerCase();
+        bVal = (b.title || "").toLowerCase();
+      } else if (gridSort.by === "date_created") {
+        aVal = a.created_at || "";
+        bVal = b.created_at || "";
+      } else if (gridSort.by === "date_updated") {
+        aVal = a.updated_at || a.created_at || "";
+        bVal = b.updated_at || b.created_at || "";
+      }
+      if (aVal < bVal) return gridSort.dir === "asc" ? -1 : 1;
+      if (aVal > bVal) return gridSort.dir === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [filtered, gridSort]);
+
+  const handleGridSortChange = (newSort) => {
+    setGridSort(newSort);
+    localStorage.setItem("compendie_grid_sort", JSON.stringify(newSort));
+  };
+
+  const handleGridOptionsMenu = (e) => {
+    const opt = (by, dir, label) => ({
+      label,
+      checked: gridSort.by === by && gridSort.dir === dir,
+      action: () => handleGridSortChange({ by, dir }),
+    });
+    openCtxMenu(e, [
+      { label: "Manual", checked: gridSort.by === "manual", action: () => handleGridSortChange({ by: "manual", dir: "asc" }) },
+      "---",
+      opt("name", "asc",  "Name: A → Z"),
+      opt("name", "desc", "Name: Z → A"),
+      "---",
+      opt("date_created", "asc",  "Date Created: First"),
+      opt("date_created", "desc", "Date Created: Last"),
+      "---",
+      opt("date_updated", "asc",  "Date Updated: First"),
+      opt("date_updated", "desc", "Date Updated: Last"),
+      ...(activeView.type === "collection" ? [
+        "---",
+        { icon: Trash2, label: "Delete Collection", danger: true, action: () => handleDeleteCollection(activeView.id) },
+      ] : []),
+    ]);
+  };
+
   return (
     <div className="app"
       onDragEnter={handleDragEnter}
@@ -423,27 +588,35 @@ export default function App() {
       onDragLeave={handleDragLeave}>
 
       <Sidebar
-        collections={collections}
-        items={items}
-        activeView={activeView}
+          collections={collections}
+          items={items}
+          activeView={activeView}
+          onSelectAll={() => setActiveView({ type: "all" })}
+          onSelectUnorganized={() => setActiveView({ type: "unorganized" })}
+          onSelectCollection={(id) => setActiveView({ type: "collection", id })}
+          onSelectTag={(tag) => setActiveView({ type: "tag", tag })}
+          onAddCollection={handleAddCollection}
+          onContextMenu={handleCollectionContextMenu}
+          collectionSort={collectionSort}
+          onSortChange={handleSortChange}
+          onReorderCollections={handleReorderCollections}
+          onAddClick={() => setAddOverlayOpen(true)}
+          width={sidebarWidth}
+          isHidden={sidebarHidden}
+          onToggleSidebar={handleToggleSidebar}
+        />
 
-        onSelectAll={() => setActiveView({ type: "all" })}
-        onSelectUnorganized={() => setActiveView({ type: "unorganized" })}
-        onSelectCollection={(id) => setActiveView({ type: "collection", id })}
-        onSelectTag={(tag) => setActiveView({ type: "tag", tag })}
-        onAddCollection={handleAddCollection}
-        onContextMenu={handleCollectionContextMenu}
-        collectionSort={collectionSort}
-        onSortChange={handleSortChange}
-        onReorderCollections={handleReorderCollections}
-        onAddClick={() => setAddOverlayOpen(true)}
-        width={sidebarWidth}
-        onResizeStart={handleSidebarResizeStart}
-      />
+      {!sidebarHidden && (
+        <div
+          className="sidebar-resize-handle"
+          style={{ left: sidebarWidth + 8 }}
+          onMouseDown={handleSidebarResizeStart}
+        />
+      )}
 
       <div className="main-area">
         <Grid
-          items={filtered}
+          items={sortedFiltered}
           allItems={items}
           collections={collections}
           imageUrls={imageUrls}
@@ -452,9 +625,16 @@ export default function App() {
           activeView={activeView}
           onCardClick={handleCardClick}
           onCardContextMenu={handleCardContextMenu}
+          onCollectionContextMenu={handleCollectionContextMenu}
           onSelectCollection={(id) => setActiveView({ type: "collection", id })}
           isDragging={isDragging}
           onReorder={handleReorder}
+          onAddClick={() => setAddOverlayOpen(true)}
+          onOptionsMenu={handleGridOptionsMenu}
+          sidebarHidden={sidebarHidden}
+          onToggleSidebar={handleToggleSidebar}
+          allTags={allTags}
+          onSelectTag={(tag) => setActiveView({ type: "tag", tag })}
         />
         <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: "none" }}
           onChange={(e) => {
@@ -492,6 +672,25 @@ export default function App() {
             setEditingCollection(null);
           }}
           onClose={() => setEditingCollection(null)}
+        />
+      )}
+
+      {newFolderParentId && (
+        <CreateCollectionModal
+          title="New Folder"
+          onSave={async ({ name, icon, color }) => {
+            await handleAddCollection({ name, icon, color, parentId: newFolderParentId });
+            setNewFolderParentId(null);
+          }}
+          onClose={() => setNewFolderParentId(null)}
+        />
+      )}
+
+      {deleteConfirm && (
+        <DeleteConfirmModal
+          collectionName={deleteConfirm.name}
+          onConfirm={confirmDeleteCollection}
+          onClose={() => setDeleteConfirm(null)}
         />
       )}
 
