@@ -747,6 +747,25 @@ export default function App() {
         />
       )}
 
+      {bulkDeleteConfirm && (
+        <DeleteConfirmModal
+          title={`Delete ${selectedIds.size} ${selectedIds.size === 1 ? "item" : "items"}?`}
+          message="This cannot be undone. Deleted items are removed from Tome permanently."
+          confirmLabel={`Delete ${selectedIds.size === 1 ? "item" : `${selectedIds.size} items`}`}
+          onConfirm={async () => { setBulkDeleteConfirm(false); await handleBulkDelete(); }}
+          onClose={() => setBulkDeleteConfirm(false)}
+        />
+      )}
+
+      {quickFolderOpen && activeView.type === "collection" && (
+        <QuickFolderModal
+          parentCollectionName={collections.find((c) => c.id === activeView.id)?.name ?? ""}
+          itemCount={selectedIds.size}
+          onSave={handleQuickNewFolder}
+          onClose={() => setQuickFolderOpen(false)}
+        />
+      )}
+
       {(addOverlayOpen || pendingFiles.length > 0) && (
         <AddOverlay
           imageFiles={pendingFiles}
