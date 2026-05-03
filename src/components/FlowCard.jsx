@@ -1,4 +1,4 @@
-export default function FlowCard({ item, imageUrl, onClick, onContextMenu }) {
+export default function FlowCard({ item, imageUrl, onClick, onContextMenu, selected = false, showSelectRing = false }) {
   const count = item.screens?.length ?? 0;
   return (
     <div
@@ -16,6 +16,9 @@ export default function FlowCard({ item, imageUrl, onClick, onContextMenu }) {
           : <div className="card-placeholder" />}
         <div className="flow-card-badge">{count} screen{count !== 1 ? "s" : ""}</div>
       </div>
+      {showSelectRing && (
+        <div className={`card-select-ring${selected ? " selected" : ""}`} />
+      )}
     </div>
   );
 }
