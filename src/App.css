@@ -1083,6 +1083,7 @@ html, body, #root { height: 100%; overflow: hidden; }
 
 /* ── Layout additions ────────────────────────────────────────── */
 .main-area {
+  position: relative; /* contains the absolutely-positioned selection bar */
   flex: 1;
   display: flex;
   overflow: hidden;
@@ -3391,3 +3392,58 @@ textarea.ui-input { min-height: 80px; line-height: 1.5; }
 
 /* card must be position:relative for the ring to anchor */
 .card { position: relative; }
+
+/* ── Selection bar ────────────────────────────────────────────────────────── */
+.selection-bar {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-2);
+  outline: 1px solid var(--border);
+  outline-offset: -1px;
+  border-radius: 12px;
+  padding: 6px 8px;
+  box-shadow: 0px 8px 16px -4px rgba(0,0,0,0.12), 0px 16px 32px -8px rgba(0,0,0,0.20);
+  z-index: 100;
+  white-space: nowrap;
+}
+
+.selection-bar-count {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  padding: 0 6px;
+}
+
+.selection-bar-clear {
+  all: unset;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: background 0.08s;
+}
+.selection-bar-clear:hover { background: rgba(67,67,67,0.20); }
+
+.selection-bar-actions-wrap {
+  position: relative;
+}
+
+.selection-bar-btn {
+  all: unset;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: rgba(67,67,67,0.15);
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.08s;
+}
+.selection-bar-btn:hover { background: rgba(67,67,67,0.28); }

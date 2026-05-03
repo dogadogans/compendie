@@ -581,6 +581,10 @@ export default function App() {
     ]);
   };
 
+  // Stable callbacks for selection bar — must be outside JSX to satisfy Rules of Hooks
+  const handleClosePickerMode = useCallback(() => setPickerMode(null), []);
+  const handleCloseActionMenu = useCallback(() => setActionMenuOpen(false), []);
+
   return (
     <div className="app"
       onDragEnter={handleDragEnter}
@@ -658,6 +662,52 @@ export default function App() {
             onNavigate={setSelectedItem}
           />
         )}
+
+        <AnimatePresence>
+          {selectedIds.size > 0 && (
+            <motion.div
+              className="selection-bar"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
+              transition={{ type: "spring", stiffness: 420, damping: 30, mass: 0.7 }}
+            >
+              <span className="selection-bar-count">{selectedIds.size} Selected</span>
+              <button className="selection-bar-clear" onClick={handleClearSelection}>×</button>
+              <div className="selection-bar-actions-wrap">
+                <button
+                  className="selection-bar-btn"
+                  onClick={() => {
+                    setPickerMode(null);
+                    setActionMenuOpen((v) => !v);
+                  }}
+                >
+                  ⌘ Actions
+                </button>
+                {actionMenuOpen && (
+                  <ActionsDropdown
+                    inCollection={activeView.type === "collection"}
+                    onMoveTo={() => { setActionMenuOpen(false); setPickerMode("move"); }}
+                    onCopyTo={() => { setActionMenuOpen(false); setPickerMode("copy"); }}
+                    onNewFolder={() => { setActionMenuOpen(false); setQuickFolderOpen(true); }}
+                    onDelete={() => { setActionMenuOpen(false); setBulkDeleteConfirm(true); }}
+                    onClose={handleCloseActionMenu}
+                  />
+                )}
+                {pickerMode && (
+                  <CollectionPicker
+                    mode={pickerMode}
+                    collections={collections}
+                    selectedIds={selectedIds}
+                    items={items}
+                    onPick={pickerMode === "move" ? handleBulkMove : handleBulkCopy}
+                    onClose={handleClosePickerMode}
+                  />
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
 
