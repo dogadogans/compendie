@@ -1,12 +1,20 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   DndContext, DragOverlay, PointerSensor,
   useSensor, useSensors, closestCenter,
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove } from "@dnd-kit/sortable";
+import * as Icons from "lucide-react";
 import FlowCard from "./FlowCard";
 import SortableCard from "./SortableCard";
 import useMasonryLayout from "../hooks/useMasonryLayout";
+
+function SubColIcon({ icon, color, size = 18 }) {
+  const Ic = Icons[icon];
+  if (Ic) return <Ic size={size} color={color || "var(--muted)"} />;
+  return <span style={{ fontSize: size }}>{icon || "📁"}</span>;
+}
 
 const ZOOM_MIN = 150;
 const ZOOM_MAX = 500;
@@ -18,8 +26,200 @@ function clampZoom(v) {
 }
 
 function loadZoom() {
-  const saved = parseInt(localStorage.getItem("tome-zoom"), 10);
+  const saved = parseInt(localStorage.getItem("compendie-zoom"), 10);
   return isNaN(saved) ? ZOOM_DEFAULT : clampZoom(saved);
+}
+
+
+function PlusIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function DotsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="4" cy="8" r="1.25" fill="currentColor"/>
+      <circle cx="8" cy="8" r="1.25" fill="currentColor"/>
+      <circle cx="12" cy="8" r="1.25" fill="currentColor"/>
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="6" cy="6" r="4.25" stroke="currentColor" strokeWidth="1.25"/>
+      <path d="M9.5 9.5L12.5 12.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function PanelLeftIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6 2.33398V13.6673" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M2 8C2 5.17157 2 3.75736 2.87868 2.87868C3.75736 2 5.17157 2 8 2C10.8284 2 12.2426 2 13.1213 2.87868C14 3.75736 14 5.17157 14 8C14 10.8284 14 12.2426 13.1213 13.1213C12.2426 14 10.8284 14 8 14C5.17157 14 3.75736 14 2.87868 13.1213C2 12.2426 2 10.8284 2 8Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function ClearIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function SearchBox({ search, onSearch, collections = [], allItems = [], allTags = [], onSelectCollection, onSelectTag }) {
+  const [open,      setOpen]      = useState(false);
+  const [dropPos,   setDropPos]   = useState({ top: 0, left: 0, width: 0 });
+  const [activeIdx, setActiveIdx] = useState(-1);
+  const wrapRef  = useRef(null);
+  const inputRef = useRef(null);
+
+  const q = search.trim().toLowerCase();
+
+  const matchedCollections = useMemo(() => {
+    if (!q) return [];
+    return collections.filter(c => !c.archived && c.name.toLowerCase().includes(q)).slice(0, 8);
+  }, [q, collections]);
+
+  const matchedTags = useMemo(() => {
+    if (!q) return [];
+    return allTags
+      .filter(t => t.includes(q))
+      .map(t => ({ tag: t, count: allItems.filter(i => i.tags.includes(t)).length }))
+      .slice(0, 8);
+  }, [q, allTags, allItems]);
+
+  const hasResults   = matchedCollections.length > 0 || matchedTags.length > 0;
+  const showDropdown = open && q.length > 0 && hasResults;
+  const totalItems   = matchedCollections.length + matchedTags.length;
+
+  const calcPos = () => {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (rect) setDropPos({ top: rect.bottom + 6, left: rect.left, width: rect.width });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    calcPos();
+    window.addEventListener("resize", calcPos);
+    return () => window.removeEventListener("resize", calcPos);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (!wrapRef.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  // Reset keyboard selection whenever the query changes
+  useEffect(() => { setActiveIdx(-1); }, [q]);
+
+  const selectByIdx = (idx) => {
+    if (idx < 0 || idx >= totalItems) return;
+    if (idx < matchedCollections.length) {
+      onSelectCollection(matchedCollections[idx].id);
+    } else {
+      onSelectTag(matchedTags[idx - matchedCollections.length].tag);
+    }
+    onSearch("");
+    setOpen(false);
+    setActiveIdx(-1);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Escape") {
+      setOpen(false);
+      if (!search) inputRef.current?.blur();
+      return;
+    }
+    if (!showDropdown) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIdx(i => Math.min(i + 1, totalItems - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIdx(i => Math.max(i - 1, -1));
+    } else if (e.key === "Enter" && activeIdx >= 0) {
+      e.preventDefault();
+      selectByIdx(activeIdx);
+    }
+  };
+
+  return (
+    <div className="search-wrapper" ref={wrapRef}>
+      <span className="search-icon-left"><SearchIcon /></span>
+      <input
+        ref={inputRef}
+        className={`search-input${search ? " search-input--has-clear" : ""}`}
+        type="text"
+        placeholder="Search…"
+        value={search}
+        onChange={(e) => { onSearch(e.target.value); setOpen(true); calcPos(); }}
+        onFocus={() => { setOpen(true); calcPos(); }}
+        onKeyDown={handleKeyDown}
+      />
+      {search && (
+        <button
+          className="search-clear-btn"
+          tabIndex={-1}
+          onMouseDown={(e) => { e.preventDefault(); onSearch(""); setOpen(false); inputRef.current?.focus(); }}
+        >
+          <ClearIcon />
+        </button>
+      )}
+      {showDropdown && createPortal(
+        <div className="search-dropdown" style={{ top: dropPos.top, left: dropPos.left, width: dropPos.width }}>
+          {matchedCollections.length > 0 && (
+            <div className="search-dd-group">
+              <div className="search-dd-section-header">Collections</div>
+              {matchedCollections.map((col, i) => (
+                <button
+                  key={col.id}
+                  className={`search-dd-item${activeIdx === i ? " active" : ""}`}
+                  onMouseEnter={() => setActiveIdx(i)}
+                  onMouseDown={(e) => { e.preventDefault(); onSelectCollection(col.id); onSearch(""); setOpen(false); }}
+                >
+                  <span className="search-dd-dot" style={{ background: col.color || "var(--muted)" }} />
+                  <span className="search-dd-label">{col.name}</span>
+                  <span className="search-dd-meta">Collection</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {matchedTags.length > 0 && (
+            <div className="search-dd-group">
+              <div className="search-dd-section-header">Tags</div>
+              {matchedTags.map(({ tag, count }, i) => {
+                const globalIdx = matchedCollections.length + i;
+                return (
+                  <button
+                    key={tag}
+                    className={`search-dd-item${activeIdx === globalIdx ? " active" : ""}`}
+                    onMouseEnter={() => setActiveIdx(globalIdx)}
+                    onMouseDown={(e) => { e.preventDefault(); onSelectTag(tag); onSearch(""); setOpen(false); }}
+                  >
+                    <span className="search-dd-hash">#</span>
+                    <span className="search-dd-label">{tag}</span>
+                    <span className="search-dd-count">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
 }
 
 export default function Grid({
@@ -32,9 +232,19 @@ export default function Grid({
   activeView,
   onCardClick,
   onCardContextMenu,
+  onCollectionContextMenu,
   onSelectCollection,
+  onSelectTag = () => {},
   isDragging,
   onReorder,
+  onAddClick,
+  onOptionsMenu,
+  sidebarHidden,
+  onToggleSidebar,
+  allTags = [],
+  organizeMode = false,
+  selectedIds = new Set(),
+  onToggleSelect,
 }) {
   const [activeTab, setActiveTab] = useState("images");
   const [activeId, setActiveId] = useState(null);
@@ -46,7 +256,7 @@ export default function Grid({
   function changeZoom(newZoom) {
     const v = clampZoom(newZoom);
     setZoom(v);
-    localStorage.setItem("tome-zoom", v);
+    localStorage.setItem("compendie-zoom", v);
     setIsZooming(true);
     clearTimeout(zoomTimerRef.current);
     zoomTimerRef.current = setTimeout(() => setIsZooming(false), 300);
@@ -86,7 +296,7 @@ export default function Grid({
       // deltaY > 0 = scroll down = zoom out (smaller images)
       setZoom((prev) => {
         const next = clampZoom(prev - Math.sign(e.deltaY) * ZOOM_STEP);
-        localStorage.setItem("tome-zoom", next);
+        localStorage.setItem("compendie-zoom", next);
         return next;
       });
       setIsZooming(true);
@@ -98,6 +308,25 @@ export default function Grid({
   }, []);
 
   const inCollection = activeView?.type === "collection";
+
+  const viewLabel = useMemo(() => {
+    if (activeView?.type === "all") return "All Images";
+    if (activeView?.type === "unorganized") return "Unorganized";
+    if (activeView?.type === "tag") return `#${activeView.tag}`;
+    if (activeView?.type === "collection") {
+      const col = collections.find(c => c.id === activeView.id);
+      return col?.name || "Collection";
+    }
+    return "All Images";
+  }, [activeView, collections]);
+
+  const viewCount = useMemo(() => {
+    if (activeView?.type === "all") return allItems.length;
+    if (activeView?.type === "unorganized") return allItems.filter(i => i.collections.length === 0).length;
+    if (activeView?.type === "collection") return allItems.filter(i => i.collections.includes(activeView.id)).length;
+    if (activeView?.type === "tag") return allItems.filter(i => i.tags.includes(activeView.tag)).length;
+    return allItems.length;
+  }, [activeView, allItems]);
 
   const subCollections = useMemo(
     () => inCollection ? collections.filter(c => c.parent_id === activeView.id && !c.archived) : [],
@@ -136,50 +365,88 @@ export default function Grid({
   return (
     <div className="grid-area">
       <header className="toolbar">
-        <input
-          className="search-input"
-          type="search"
-          placeholder="Search…"
-          value={search}
-          onChange={(e) => onSearch(e.target.value)}
-        />
-        <input
-          className="zoom-slider"
-          type="range"
-          min={ZOOM_MIN}
-          max={ZOOM_MAX}
-          step={ZOOM_STEP}
-          value={zoom}
-          onChange={(e) => changeZoom(parseInt(e.target.value, 10))}
-          title="Zoom (or Ctrl+scroll)"
-        />
-        {subCollections.length > 0 && (
-          <div className="subfolder-row">
-            {subCollections.map(col => {
-              const count = allItems.filter(i => i.collections.includes(col.id)).length;
-              return (
-                <div key={col.id} className="subfolder-card" onClick={() => onSelectCollection(col.id)}>
-                  <span className="subfolder-icon">{col.icon || "📁"}</span>
-                  <span className="subfolder-name">{col.name}</span>
-                  <span className="subfolder-count">{count}</span>
-                </div>
-              );
-            })}
+        {/* Left: optional sidebar toggle + view icon + name + count + add button */}
+        <div className="toolbar-left">
+          <button className="btn-sidebar-toggle" onClick={onToggleSidebar} title={sidebarHidden ? "Show sidebar" : "Hide sidebar"}>
+            <PanelLeftIcon />
+          </button>
+<span className="toolbar-view-name">{viewLabel}</span>
+          <span className="toolbar-view-count">{viewCount}</span>
+        </div>
+
+        {/* Center: search */}
+        <div className="toolbar-center">
+          <SearchBox
+            search={search}
+            onSearch={onSearch}
+            collections={collections}
+            allItems={allItems}
+            allTags={allTags}
+            onSelectCollection={onSelectCollection}
+            onSelectTag={onSelectTag}
+          />
+        </div>
+
+        {/* Right: zoom slider + add + options */}
+        <div className="toolbar-right">
+          <div className="zoom-container">
+            <input
+              className="zoom-slider"
+              type="range"
+              min={ZOOM_MIN}
+              max={ZOOM_MAX}
+              step={ZOOM_STEP}
+              value={zoom}
+              onChange={(e) => changeZoom(parseInt(e.target.value, 10))}
+              title="Zoom (or Ctrl+scroll)"
+            />
           </div>
-        )}
-        {inCollection && (
-          <div className="collection-tabs">
-            <button
-              className={`tab-btn${activeTab === "images" ? " active" : ""}`}
-              onClick={() => setActiveTab("images")}
-            >Images</button>
-            <button
-              className={`tab-btn${activeTab === "flows" ? " active" : ""}`}
-              onClick={() => setActiveTab("flows")}
-            >Flows</button>
-          </div>
-        )}
+          <button className="btn-icon" onClick={onAddClick} title="Add image">
+            <PlusIcon />
+          </button>
+          <button className="btn-icon" onClick={onOptionsMenu} title="Options">
+            <DotsIcon />
+          </button>
+        </div>
       </header>
+
+      {/* Below toolbar: sub-collections and tabs */}
+      {subCollections.length > 0 && (
+        <div className="subfolder-row">
+          {subCollections.map(col => {
+            const count = allItems.filter(i => i.collections.includes(col.id)).length;
+            return (
+              <div key={col.id} className="subfolder-card" onClick={() => onSelectCollection(col.id)}>
+                <div className="subfolder-card-top">
+                  <SubColIcon icon={col.icon} color={col.color} />
+                  <button
+                    className="subfolder-dots"
+                    onClick={(e) => { e.stopPropagation(); onCollectionContextMenu?.(e, col); }}
+                  >
+                    <DotsIcon />
+                  </button>
+                </div>
+                <div className="subfolder-card-bottom">
+                  <span className="subfolder-name">{col.name}</span>
+                  <span className="subfolder-count">{count} {count === 1 ? "Image" : "Images"}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {inCollection && (
+        <div className="collection-tabs" style={{ padding: "0 20px 8px" }}>
+          <button
+            className={`tab-btn${activeTab === "images" ? " active" : ""}`}
+            onClick={() => setActiveTab("images")}
+          >Images</button>
+          <button
+            className={`tab-btn${activeTab === "flows" ? " active" : ""}`}
+            onClick={() => setActiveTab("flows")}
+          >Flows</button>
+        </div>
+      )}
 
       {inCollection && activeTab === "flows" ? (
         flowItems.length === 0 ? (
@@ -250,8 +517,10 @@ export default function Grid({
                       <FlowCard
                         item={item}
                         imageUrl={firstScreenUrl}
-                        onClick={() => onCardClick(item)}
+                        onClick={() => organizeMode ? onToggleSelect?.(item.id) : onCardClick(item)}
                         onContextMenu={onCardContextMenu}
+                        selected={organizeMode && selectedIds.has(item.id)}
+                        showSelectRing={organizeMode}
                       />
                     </SortableCard>
                   );
@@ -267,13 +536,16 @@ export default function Grid({
                     <div
                       data-item-id={item.id}
                       className="card"
-                      onClick={() => onCardClick(item)}
+                      onClick={() => organizeMode ? onToggleSelect?.(item.id) : onCardClick(item)}
                       onContextMenu={(e) => { e.preventDefault(); onCardContextMenu(e, item); }}
                       title={item.title || undefined}
                     >
                       {imageUrls[item.id]
                         ? <img src={imageUrls[item.id]} alt={item.title || "image"} loading="lazy" draggable={false} onLoad={recalculate} />
                         : <div className="card-placeholder" />}
+                      {organizeMode && (
+                        <div className={`card-select-ring${selectedIds.has(item.id) ? " selected" : ""}`} />
+                      )}
                     </div>
                   </SortableCard>
                 );

@@ -635,6 +635,9 @@ export default function App() {
           onToggleSidebar={handleToggleSidebar}
           allTags={allTags}
           onSelectTag={(tag) => setActiveView({ type: "tag", tag })}
+          organizeMode={organizeMode}
+          selectedIds={selectedIds}
+          onToggleSelect={handleToggleSelect}
         />
         <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: "none" }}
           onChange={(e) => {
