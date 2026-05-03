@@ -558,25 +558,31 @@ export default function App() {
   };
 
   const handleGridOptionsMenu = (e) => {
-    const opt = (by, dir, label) => ({
-      label,
-      checked: gridSort.by === by && gridSort.dir === dir,
-      action: () => handleGridSortChange({ by, dir }),
-    });
-    openCtxMenu(e, [
+    const inCollection = activeView.type === "collection";
+    const collection   = inCollection ? collections.find((c) => c.id === activeView.id) : null;
+
+    const sortItems = [
       { label: "Manual", checked: gridSort.by === "manual", action: () => handleGridSortChange({ by: "manual", dir: "asc" }) },
       "---",
-      opt("name", "asc",  "Name: A → Z"),
-      opt("name", "desc", "Name: Z → A"),
+      { label: "Name: A → Z",          checked: gridSort.by === "name"         && gridSort.dir === "asc",  action: () => handleGridSortChange({ by: "name",         dir: "asc"  }) },
+      { label: "Name: Z → A",          checked: gridSort.by === "name"         && gridSort.dir === "desc", action: () => handleGridSortChange({ by: "name",         dir: "desc" }) },
       "---",
-      opt("date_created", "asc",  "Date Created: First"),
-      opt("date_created", "desc", "Date Created: Last"),
+      { label: "Date Created: First",   checked: gridSort.by === "date_created" && gridSort.dir === "asc",  action: () => handleGridSortChange({ by: "date_created", dir: "asc"  }) },
+      { label: "Date Created: Last",    checked: gridSort.by === "date_created" && gridSort.dir === "desc", action: () => handleGridSortChange({ by: "date_created", dir: "desc" }) },
       "---",
-      opt("date_updated", "asc",  "Date Updated: First"),
-      opt("date_updated", "desc", "Date Updated: Last"),
-      ...(activeView.type === "collection" ? [
+      { label: "Date Updated: First",   checked: gridSort.by === "date_updated" && gridSort.dir === "asc",  action: () => handleGridSortChange({ by: "date_updated", dir: "asc"  }) },
+      { label: "Date Updated: Last",    checked: gridSort.by === "date_updated" && gridSort.dir === "desc", action: () => handleGridSortChange({ by: "date_updated", dir: "desc" }) },
+    ];
+
+    openCtxMenu(e, [
+      { label: "Sort by", submenu: true, action: () => openCtxMenu(e, sortItems) },
+      ...(inCollection ? [
         "---",
-        { icon: Trash2, label: "Delete Collection", danger: true, action: () => handleDeleteCollection(activeView.id) },
+        { label: "Organize images/flows", action: () => { setOrganizeMode(true); setCtxMenu(null); } },
+        { label: "Edit…",                 action: () => { setEditingCollection(collection); setCtxMenu(null); } },
+        "---",
+        { label: "Archive collection",    action: () => handleArchiveCollection(activeView.id) },
+        { label: "Delete collection", danger: true, action: () => handleDeleteCollection(activeView.id) },
       ] : []),
     ]);
   };
