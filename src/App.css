@@ -3306,3 +3306,60 @@ textarea.ui-input { min-height: 80px; line-height: 1.5; }
   background: var(--border);
   margin: 4px 6px;
 }
+
+/* ── Collection picker ────────────────────────────────────────────────────── */
+.collection-picker {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  background: var(--surface-2);
+  outline: 1px solid var(--border);
+  outline-offset: -1px;
+  border-radius: 12px;
+  box-shadow: 0px 10px 10px -5px rgba(0,0,0,0.08), 0px 20px 25px -5px rgba(0,0,0,0.16);
+  padding: 8px;
+  min-width: 200px;
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 200;
+  animation: ctx-in 0.1s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.collection-picker-header {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 4px 8px 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.collection-picker-empty {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 8px;
+  text-align: center;
+}
+
+.collection-picker-item {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.08s;
+}
+.collection-picker-item:hover:not(.disabled) { background: rgba(67,67,67,0.20); }
+.collection-picker-item.disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.45;
+}
