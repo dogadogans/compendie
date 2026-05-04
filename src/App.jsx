@@ -561,18 +561,7 @@ export default function App() {
     const inCollection = activeView.type === "collection";
     const collection   = inCollection ? collections.find((c) => c.id === activeView.id) : null;
 
-    const sortItems = [
-      { label: "Manual", checked: gridSort.by === "manual", action: () => handleGridSortChange({ by: "manual", dir: "asc" }) },
-      "---",
-      { label: "Name: A → Z",          checked: gridSort.by === "name"         && gridSort.dir === "asc",  action: () => handleGridSortChange({ by: "name",         dir: "asc"  }) },
-      { label: "Name: Z → A",          checked: gridSort.by === "name"         && gridSort.dir === "desc", action: () => handleGridSortChange({ by: "name",         dir: "desc" }) },
-      "---",
-      { label: "Date Created: First",   checked: gridSort.by === "date_created" && gridSort.dir === "asc",  action: () => handleGridSortChange({ by: "date_created", dir: "asc"  }) },
-      { label: "Date Created: Last",    checked: gridSort.by === "date_created" && gridSort.dir === "desc", action: () => handleGridSortChange({ by: "date_created", dir: "desc" }) },
-      "---",
-      { label: "Date Updated: First",   checked: gridSort.by === "date_updated" && gridSort.dir === "asc",  action: () => handleGridSortChange({ by: "date_updated", dir: "asc"  }) },
-      { label: "Date Updated: Last",    checked: gridSort.by === "date_updated" && gridSort.dir === "desc", action: () => handleGridSortChange({ by: "date_updated", dir: "desc" }) },
-    ];
+    const sortItems = buildSortMenuItems(gridSort, handleGridSortChange);
 
     openCtxMenu(e, [
       { label: "Sort by", submenu: true, action: () => openCtxMenu(e, sortItems) },
