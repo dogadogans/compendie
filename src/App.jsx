@@ -310,6 +310,12 @@ export default function App() {
     setPickerMode(null);
   }, []);
 
+  const handleAddCollection = async ({ name, icon, color, parentId }) => {
+    const col = await addCollection({ name, icon, color, parentId });
+    setCollections((prev) => [...prev, col]);
+    return col;
+  };
+
   // Move selected items into targetId, removing them from the current collection
   const handleBulkMove = useCallback(async (targetId) => {
     const ids = [...selectedIds];
@@ -356,12 +362,6 @@ export default function App() {
   }, [selectedIds, activeView, handleAddCollection, handleUpdate, handleClearSelection]);
 
   // ── Collection handlers ──────────────────────────────────────────────────────
-
-  const handleAddCollection = async ({ name, icon, color, parentId }) => {
-    const col = await addCollection({ name, icon, color, parentId });
-    setCollections((prev) => [...prev, col]);
-    return col;
-  };
 
   const handleUpdateCollection = async (id, { name, icon, color }) => {
     const updated = await updateCollection(id, { name, icon, color });
