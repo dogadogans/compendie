@@ -620,6 +620,7 @@ html, body, #root { height: 100%; overflow: hidden; }
 }
 
 .card {
+  position: relative;
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -3390,9 +3391,6 @@ textarea.ui-input { min-height: 80px; line-height: 1.5; }
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 10.5l3.5 3.5 6.5-7' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/16px no-repeat;
 }
 
-/* card must be position:relative for the ring to anchor */
-.card { position: relative; }
-
 /* ── Selection bar ────────────────────────────────────────────────────────── */
 .selection-bar {
   position: absolute;
@@ -3440,7 +3438,7 @@ textarea.ui-input { min-height: 80px; line-height: 1.5; }
   font-size: 13px;
   font-weight: 500;
   color: var(--text);
-  background: rgba(67,67,67,0.15);
+  background: var(--surface-1, rgba(67,67,67,0.15));
   padding: 6px 12px;
   border-radius: 8px;
   cursor: pointer;
