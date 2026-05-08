@@ -1,48 +1,94 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import * as LucideIcons from "lucide-react";
+import { TagInputBox } from "./ui/TagInputBox";
+import { CollectionChip } from "./ui/CollectionChip";
+import ContextMenu from "./ContextMenu";
+
+const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
 
 export default function DetailPanel({
   item,
   allItems,
   imageUrls,
   collections,
+  allTags = [],
   onUpdate,
   onDelete,
   onClose,
   onNavigate,
+  onCreateCollection,
+  onAddNewCollection,
 }) {
-  const [title,    setTitle]    = useState(item.title);
-  const [tagInput, setTagInput] = useState("");
-  const [tags,     setTags]     = useState(item.tags);
-  const [note,     setNote]     = useState(item.note);
-  const [showCollectionPicker, setShowCollectionPicker] = useState(false);
-  const pickerRef = useRef(null);
+  const [title, setTitle]             = useState(item.title);
+  const [tags,  setTags]              = useState(item.tags);
+  const [note,  setNote]              = useState(item.note);
+  const [zoom,  setZoom]              = useState(1);
+  const [metaHidden,  setMetaHidden]  = useState(false);
+  const [metaWidth,   setMetaWidth]   = useState(
+    () => parseInt(localStorage.getItem("tome_detail_meta_width") || "320")
+  );
+  const [panX,  setPanX]  = useState(0);
+  const [panY,  setPanY]  = useState(0);
+  const [isPanning, setIsPanning] = useState(false);
+  const [colPickerPos, setColPickerPos] = useState(null);
+  const [dotMenuPos,   setDotMenuPos]   = useState(null);
 
-  // Images only — flows are handled by FlowDetail
-  const imageItems = allItems.filter((i) => i.type !== "flow");
+  const zoomRef    = useRef(zoom);
+  const colBtnRef  = useRef(null);
+  const dotBtnRef  = useRef(null);
+  const titleRef   = useRef(null);
+  const noteRef    = useRef(null);
+
+  const autoResize = (el) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  };
+
+  const imageItems   = allItems.filter((i) => i.type !== "flow");
   const currentIndex = imageItems.findIndex((i) => i.id === item.id);
-  const hasPrev = currentIndex > 0;
-  const hasNext = currentIndex < imageItems.length - 1;
+  const hasPrev      = currentIndex > 0;
+  const hasNext      = currentIndex < imageItems.length - 1;
+  const imageUrl     = imageUrls[item.id];
 
-  const imageUrl = imageUrls[item.id];
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
-  // Sync when a different item is selected
   useEffect(() => {
     setTitle(item.title);
     setTags(item.tags);
     setNote(item.note);
-    setTagInput("");
-    setShowCollectionPicker(false);
+    setColPickerPos(null);
+    setDotMenuPos(null);
+    setZoom(1);
+    setPanX(0);
+    setPanY(0);
+    if (titleRef.current) titleRef.current.innerText = item.title || "";
+    requestAnimationFrame(() => autoResize(noteRef.current));
   }, [item.id]);
 
-  // Close collection picker on outside click
+  // Reset pan when returning to 1:1
   useEffect(() => {
-    if (!showCollectionPicker) return;
+    if (zoom === 1) { setPanX(0); setPanY(0); }
+  }, [zoom]);
+
+  // Ctrl+wheel → zoom image; on document so it beats browser zoom
+  useEffect(() => {
     const handler = (e) => {
-      if (!pickerRef.current?.contains(e.target)) setShowCollectionPicker(false);
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const z = zoomRef.current;
+      if (e.deltaY < 0) {
+        const next = ZOOM_STEPS.find(s => s > z);
+        if (next !== undefined) setZoom(next);
+      } else {
+        const prev = [...ZOOM_STEPS].reverse().find(s => s < z);
+        if (prev !== undefined) setZoom(prev);
+      }
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [showCollectionPicker]);
+    document.addEventListener("wheel", handler, { passive: false });
+    return () => document.removeEventListener("wheel", handler);
+  }, []);
 
   // Keyboard: Escape to close, arrows to navigate
   useEffect(() => {
@@ -57,29 +103,53 @@ export default function DetailPanel({
     return () => window.removeEventListener("keydown", handler);
   }, [onClose, onNavigate, hasPrev, hasNext, currentIndex, imageItems]);
 
+  const handleImgAreaMouseDown = (e) => {
+    if (zoom <= 1) return;
+    e.preventDefault();
+    const startX = e.clientX - panX;
+    const startY = e.clientY - panY;
+    setIsPanning(true);
+    const onMove = (ev) => {
+      setPanX(ev.clientX - startX);
+      setPanY(ev.clientY - startY);
+    };
+    const onUp = () => {
+      setIsPanning(false);
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
   const saveTitle = () => {
-    if (title !== item.title) onUpdate(item.id, { title });
+    const t = (titleRef.current?.innerText ?? "").replace(/\n/g, " ").trim();
+    if (t !== item.title) onUpdate(item.id, { title: t });
   };
+  const saveNote  = () => { if (note  !== item.note)  onUpdate(item.id, { note });  };
 
-  const saveNote = () => {
-    if (note !== item.note) onUpdate(item.id, { note });
-  };
-
-  const addTag = () => {
-    const t = tagInput.trim().toLowerCase();
-    if (!t || tags.includes(t)) { setTagInput(""); return; }
-    const next = [...tags, t];
+  // Tag helpers
+  const addTag = (t) => {
+    const cleaned = t.trim().toLowerCase();
+    if (!cleaned || tags.includes(cleaned)) return;
+    const next = [...tags, cleaned];
     setTags(next);
     onUpdate(item.id, { tags: next });
-    setTagInput("");
   };
-
   const removeTag = (t) => {
     const next = tags.filter((x) => x !== t);
     setTags(next);
     onUpdate(item.id, { tags: next });
   };
+  const renameTag = (oldTag, newTag) => {
+    const cleaned = newTag.trim().toLowerCase();
+    if (!cleaned || cleaned === oldTag || tags.includes(cleaned)) return;
+    const next = tags.map((t) => (t === oldTag ? cleaned : t));
+    setTags(next);
+    onUpdate(item.id, { tags: next });
+  };
 
+  // Collection helper
   const toggleCollection = (colId) => {
     const next = item.collections.includes(colId)
       ? item.collections.filter((id) => id !== colId)
@@ -87,134 +157,264 @@ export default function DetailPanel({
     onUpdate(item.id, { collections: next });
   };
 
+  // ContextMenu items for collections
+  const colMenuItems = collections
+    .filter((c) => !c.archived)
+    .map((c) => ({
+      icon: LucideIcons[c.icon] ?? LucideIcons.Folder,
+      iconColor: c.color || undefined,
+      label: c.name,
+      checked: item.collections.includes(c.id),
+      action: () => toggleCollection(c.id),
+    }));
+
+  // Dot menu items
+  const dotMenuItems = [
+    {
+      icon: LucideIcons.Trash2,
+      label: "Delete",
+      danger: true,
+      action: () => { onDelete(item.id); onClose(); },
+    },
+  ];
+
+  const openColPicker = () => {
+    const rect = colBtnRef.current?.getBoundingClientRect();
+    if (rect) setColPickerPos({ x: rect.left, y: rect.bottom + 4 });
+  };
+  const openDotMenu = () => {
+    const rect = dotBtnRef.current?.getBoundingClientRect();
+    if (rect) setDotMenuPos({ x: rect.right - 160, y: rect.bottom + 4 });
+  };
+
+  const handleMetaResizeStart = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = metaWidth;
+    const onMove = (ev) => {
+      const next = Math.min(520, Math.max(240, startWidth + (startX - ev.clientX)));
+      setMetaWidth(next);
+      localStorage.setItem("tome_detail_meta_width", next);
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
+  const activeCollections = collections.filter((c) => item.collections.includes(c.id));
+
+  const fileExt = item.image_path
+    ? "." + item.image_path.split(".").pop().toLowerCase()
+    : null;
+
   const formattedDate = new Date(item.created_at).toLocaleDateString("en-US", {
     year: "numeric", month: "long", day: "numeric",
   });
 
-  const activeCollections    = collections.filter((c) => item.collections.includes(c.id));
-  const availableCollections = collections.filter((c) => !c.archived && !item.collections.includes(c.id));
+  const zoomStepIndex = ZOOM_STEPS.indexOf(zoom) !== -1 ? ZOOM_STEPS.indexOf(zoom) : 2;
 
   return (
-    <div className="detail-fullscreen">
+    <div className="detail-backdrop" onClick={onClose}>
+      <div className="detail-modal" onClick={(e) => e.stopPropagation()}>
 
-      {/* ── Image side ── */}
-      <div className="detail-img-side">
-        {imageUrl
-          ? <img src={imageUrl} alt={item.title || "image"} className="detail-img" />
-          : <div className="detail-img-placeholder" />}
+        {/* ── Top bar ── */}
+        <div className="detail-topbar">
+          <div className="detail-topbar-nav">
+            <button
+              className="btn-icon"
+              onClick={() => hasPrev && onNavigate(imageItems[currentIndex - 1])}
+              disabled={!hasPrev}
+              title="Previous (←)"
+            >
+              <LucideIcons.ChevronLeft size={15} />
+            </button>
+            <button
+              className="btn-icon"
+              onClick={() => hasNext && onNavigate(imageItems[currentIndex + 1])}
+              disabled={!hasNext}
+              title="Next (→)"
+            >
+              <LucideIcons.ChevronRight size={15} />
+            </button>
+            {imageItems.length > 1 && (
+              <span className="detail-topbar-counter">{currentIndex + 1} / {imageItems.length}</span>
+            )}
+          </div>
 
-        {/* Nav arrows */}
-        {hasPrev && (
-          <button
-            className="detail-nav-arrow detail-nav-prev"
-            onClick={() => onNavigate(imageItems[currentIndex - 1])}
-            title="Previous (←)"
-          >‹</button>
-        )}
-        {hasNext && (
-          <button
-            className="detail-nav-arrow detail-nav-next"
-            onClick={() => onNavigate(imageItems[currentIndex + 1])}
-            title="Next (→)"
-          >›</button>
-        )}
+          {/* Zoom slider */}
+          <div className="detail-topbar-zoom">
+            <input
+              type="range"
+              className="detail-zoom-slider"
+              min={0}
+              max={ZOOM_STEPS.length - 1}
+              value={zoomStepIndex}
+              onChange={(e) => setZoom(ZOOM_STEPS[parseInt(e.target.value)])}
+              title={`Zoom: ${Math.round(zoom * 100)}%`}
+            />
+          </div>
 
-        {/* Close */}
-        <button className="detail-close" onClick={onClose} title="Close (Esc)">×</button>
-
-        {/* Counter */}
-        {imageItems.length > 1 && (
-          <span className="detail-counter">{currentIndex + 1} of {imageItems.length}</span>
-        )}
-      </div>
-
-      {/* ── Metadata side ── */}
-      <div className="detail-meta-side">
-
-        {/* Title */}
-        <input
-          className="panel-title detail-meta-title"
-          value={title}
-          placeholder="Untitled"
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={saveTitle}
-        />
-
-        <div className="detail-meta-divider" />
-
-        {/* Tags */}
-        <span className="detail-meta-label">Tags</span>
-        <div className="panel-tags-wrap">
-          {tags.map((t) => (
-            <span key={t} className="tag-pill">
-              {t}
-              <button className="tag-remove" onClick={() => removeTag(t)}>×</button>
-            </span>
-          ))}
-          <input
-            className="tag-input"
-            placeholder="Add tag…"
-            value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") { e.preventDefault(); addTag(); }
-            }}
-            onBlur={addTag}
-          />
+          <div className="detail-topbar-actions">
+            <button
+              className="btn-icon"
+              onClick={() => setMetaHidden((v) => !v)}
+              title={metaHidden ? "Show panel" : "Hide panel"}
+            >
+              <LucideIcons.PanelRight size={15} />
+            </button>
+            <button
+              ref={dotBtnRef}
+              className="btn-icon"
+              onClick={openDotMenu}
+              title="More options"
+            >
+              <LucideIcons.MoreHorizontal size={15} />
+            </button>
+            <button className="btn-icon" onClick={onClose} title="Close (Esc)">
+              <LucideIcons.X size={15} />
+            </button>
+          </div>
         </div>
 
-        {/* Collections */}
-        <span className="detail-meta-label" style={{ marginTop: "16px" }}>Collections</span>
-        <div className="panel-collections-wrap" ref={pickerRef}>
-          {activeCollections.map((col) => (
-            <span key={col.id} className="collection-pill">
-              {col.icon} {col.name}
-              <button className="tag-remove" onClick={() => toggleCollection(col.id)}>×</button>
-            </span>
-          ))}
-          {availableCollections.length > 0 && (
-            <div className="collection-add-wrap">
-              <button
-                className="collection-add-btn"
-                onClick={() => setShowCollectionPicker((v) => !v)}
-              >+</button>
-              {showCollectionPicker && (
-                <div className="collection-picker">
-                  {availableCollections.map((col) => (
-                    <button
-                      key={col.id}
-                      className="collection-picker-item"
-                      onClick={() => { toggleCollection(col.id); setShowCollectionPicker(false); }}
-                    >
-                      {col.icon} {col.name}
-                    </button>
-                  ))}
-                </div>
-              )}
+        {/* ── Body ── */}
+        <div className="detail-body">
+
+          {/* Image side */}
+          <div
+            className="detail-img-area"
+            style={{ cursor: isPanning ? "grabbing" : zoom > 1 ? "grab" : "default" }}
+            onMouseDown={handleImgAreaMouseDown}
+          >
+            {imageUrl
+              ? <img
+                  src={imageUrl}
+                  alt={title || "image"}
+                  className="detail-img"
+                  style={{
+                    transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+                    userSelect: "none",
+                    pointerEvents: "none",
+                  }}
+                />
+              : <div className="detail-img-placeholder" />
+            }
+          </div>
+
+          {/* Metadata side */}
+          {!metaHidden && (
+            <>
+            <div className="detail-meta-resize-handle" onMouseDown={handleMetaResizeStart} />
+            <div className="detail-meta-side" style={{ width: metaWidth, flex: "none" }}>
+
+              <div className="detail-meta-title-row" onClick={() => titleRef.current?.focus()}>
+                <div
+                  ref={titleRef}
+                  className="detail-meta-title"
+                  contentEditable
+                  suppressContentEditableWarning
+                  data-placeholder="Untitled"
+                  onInput={(e) => {
+                    const text = e.currentTarget.innerText.replace(/\n/g, " ");
+                    if (text.length > 120) {
+                      e.currentTarget.innerText = text.slice(0, 120);
+                      const range = document.createRange();
+                      range.selectNodeContents(e.currentTarget);
+                      range.collapse(false);
+                      const sel = window.getSelection();
+                      sel.removeAllRanges();
+                      sel.addRange(range);
+                    }
+                    setTitle(e.currentTarget.innerText);
+                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+                  onBlur={saveTitle}
+                />
+                {fileExt && <span className="detail-meta-ext">{fileExt}</span>}
+              </div>
+
+              <textarea
+                ref={noteRef}
+                className="detail-meta-note"
+                placeholder="no notes"
+                value={note}
+                maxLength={1000}
+                style={{ fontSize: note.length < 600 ? 14 : Math.max(11, 14 - ((note.length - 600) / 400) * 3) + "px" }}
+                onChange={(e) => { setNote(e.target.value); autoResize(e.target); }}
+                onBlur={saveNote}
+              />
+
+              <div className="detail-meta-divider" />
+
+              {/* Collections */}
+              <span className="detail-meta-label">Collections</span>
+              <div className="detail-pills-row">
+                {activeCollections.map((col) => (
+                  <CollectionChip
+                    key={col.id}
+                    name={col.name}
+                    color={col.color}
+                    icon={col.icon}
+                    onRemove={() => toggleCollection(col.id)}
+                  />
+                ))}
+                <button ref={colBtnRef} className="detail-add-btn" onClick={openColPicker}><LucideIcons.Plus size={16} /></button>
+              </div>
+
+              {/* Tags */}
+              <span className="detail-meta-label" style={{ marginTop: "14px" }}>Tags</span>
+              <TagInputBox
+                compact
+                tags={tags}
+                allTags={allTags}
+                onAdd={addTag}
+                onRemove={removeTag}
+                onRename={renameTag}
+              />
+
+              {/* Footer */}
+              <div className="detail-meta-footer">
+                <p className="panel-date">{formattedDate}</p>
+              </div>
+
             </div>
+            </>
           )}
         </div>
-
-        {/* Note */}
-        <span className="detail-meta-label" style={{ marginTop: "16px" }}>Note</span>
-        <textarea
-          className="panel-note"
-          placeholder="Add a note…"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          onBlur={saveNote}
-        />
-
-        {/* Footer */}
-        <div className="detail-meta-footer">
-          <p className="panel-date">{formattedDate}</p>
-          <button
-            className="btn-danger panel-delete"
-            onClick={() => { onDelete(item.id); onClose(); }}
-          >Delete</button>
-        </div>
-
       </div>
+
+      {/* Collection picker portal */}
+      {colPickerPos && createPortal(
+        <div onClick={(e) => e.stopPropagation()}>
+          <ContextMenu
+            x={colPickerPos.x}
+            y={colPickerPos.y}
+            items={colMenuItems}
+            searchable
+            onAddNew={(name) => {
+              setColPickerPos(null);
+              onAddNewCollection?.(name);
+            }}
+            onClose={() => setColPickerPos(null)}
+          />
+        </div>,
+        document.body
+      )}
+
+      {/* Dot menu portal */}
+      {dotMenuPos && createPortal(
+        <div onClick={(e) => e.stopPropagation()}>
+          <ContextMenu
+            x={dotMenuPos.x}
+            y={dotMenuPos.y}
+            items={dotMenuItems}
+            onClose={() => setDotMenuPos(null)}
+          />
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
