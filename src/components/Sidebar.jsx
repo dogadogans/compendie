@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import * as Icons from "lucide-react";
 import CreateCollectionModal from "./CreateCollectionModal";
@@ -21,6 +21,21 @@ function SortableCollectionRow({ col, disabled, children }) {
   );
 }
 
+function SortableTagRow({ tag, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: tag });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      {...attributes}
+      {...listeners}
+    >
+      {children}
+    </div>
+  );
+}
+
 function ColIcon({ icon, color, size = 16 }) {
   const Ic = Icons[icon];
   if (Ic) return <Ic size={size} color={color || "var(--muted)"} />;
@@ -35,8 +50,12 @@ export default function Sidebar({
   onSelectUnorganized,
   onSelectCollection,
   onSelectTag,
+  sidebarTags,
+  onAddTag,
+  onReorderTags,
   onRenameTag,
   onDeleteTag,
+  onNestCollection,
   onAddCollection,
   onContextMenu,
   onAddClick,
@@ -64,13 +83,16 @@ export default function Sidebar({
   const [tagMenu, setTagMenu] = useState(null); // { tag, x, y }
   const [renamingTag, setRenamingTag] = useState(null);
   const [renameDraft, setRenameDraft] = useState("");
-  const [tagSort, setTagSort] = useState({ by: "name", dir: "asc" });
-  const [tagSortMenuPos, setTagSortMenuPos] = useState(null);
-  const tagSortBtnRef = useRef(null);
+  const [tagSort, setTagSort] = useState({ by: "manual", dir: "asc" });
+  const [newTagOpen, setNewTagOpen] = useState(false);
+  const [newTagDraft, setNewTagDraft] = useState("");
+  const nestTimerRef = useRef(null);
+  const [nestTargetId, setNestTargetId] = useState(null);
 
-  const allTags = useMemo(() => {
-    const unique = [...new Set(items.flatMap((i) => i.tags))];
-    const withCount = unique.map((tag) => ({
+  const displayTags = (() => {
+    const tags = sidebarTags || [];
+    if (tagSort.by === "manual") return tags;
+    const withCount = tags.map((tag) => ({
       tag,
       count: items.filter((i) => i.tags.includes(tag)).length,
     }));
@@ -81,7 +103,7 @@ export default function Sidebar({
         return dir * a.tag.localeCompare(b.tag);
       })
       .map((x) => x.tag);
-  }, [items, tagSort]);
+  })();
 
   const handleTagContextMenu = (e, tag) => {
     e.preventDefault();
@@ -95,10 +117,42 @@ export default function Sidebar({
     setRenamingTag(null);
   };
 
-  const openTagSortMenu = (e) => {
-    e.stopPropagation();
-    const rect = tagSortBtnRef.current?.getBoundingClientRect();
-    if (rect) setTagSortMenuPos({ x: rect.left, y: rect.bottom + 4 });
+  const commitNewTag = () => {
+    const cleaned = newTagDraft.trim().toLowerCase();
+    if (cleaned) onAddTag(cleaned);
+    setNewTagDraft("");
+    setNewTagOpen(false);
+  };
+
+  const handleTagDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return;
+    const ordered = sidebarTags || [];
+    const oldIdx = ordered.indexOf(active.id);
+    const newIdx = ordered.indexOf(over.id);
+    if (oldIdx === -1 || newIdx === -1) return;
+    onReorderTags(arrayMove(ordered, oldIdx, newIdx));
+    setTagSort({ by: "manual", dir: "asc" });
+  };
+
+  const handleCollectionDragOver = ({ over, active }) => {
+    clearTimeout(nestTimerRef.current);
+    if (!over || over.id === active?.id) { setNestTargetId(null); return; }
+    nestTimerRef.current = setTimeout(() => setNestTargetId(over.id), 700);
+  };
+
+  const handleCollectionDragEnd = ({ active, over }) => {
+    clearTimeout(nestTimerRef.current);
+    if (nestTargetId && nestTargetId !== active.id) {
+      onNestCollection(active.id, nestTargetId);
+      setNestTargetId(null);
+      return;
+    }
+    setNestTargetId(null);
+    if (!over || active.id === over.id) return;
+    const oldIndex = topLevel.findIndex((c) => c.id === active.id);
+    const newIndex = topLevel.findIndex((c) => c.id === over.id);
+    if (!isManual) onSortChange?.({ by: "manual", dir: "asc" });
+    onReorderCollections(arrayMove(topLevel, oldIndex, newIndex).map((c) => c.id));
   };
 
   const topLevel = useMemo(() => {
@@ -124,13 +178,6 @@ export default function Sidebar({
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
-  const handleDragEnd = ({ active, over }) => {
-    if (!over || active.id === over.id) return;
-    const oldIndex = topLevel.findIndex((c) => c.id === active.id);
-    const newIndex = topLevel.findIndex((c) => c.id === over.id);
-    if (!isManual) onSortChange?.({ by: "manual", dir: "asc" });
-    onReorderCollections(arrayMove(topLevel, oldIndex, newIndex).map((c) => c.id));
-  };
 
   const handleModalSave = async ({ name, icon, color }) => {
     await onAddCollection({ name, icon, color, parentId: null });
@@ -173,7 +220,7 @@ export default function Sidebar({
       <div key={col.id} className="collection-row-wrap">
         <div
           data-collection-id={col.id}
-          className={`nav-item collection-item${isActive ? " active" : ""}${isChild ? " sub-item" : ""}`}
+          className={`nav-item collection-item${isActive ? " active" : ""}${isChild ? " sub-item" : ""}${nestTargetId === col.id ? " nest-target" : ""}`}
           onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, col); }}
         >
           {isChild ? (
@@ -286,7 +333,7 @@ export default function Sidebar({
           </div>
 
           {!foldersCollapsed && (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragOver={handleCollectionDragOver} onDragEnd={handleCollectionDragEnd}>
               <SortableContext items={topLevel.map((c) => c.id)} strategy={verticalListSortingStrategy}>
                 {topLevel.map((col) => (
                   <SortableCollectionRow key={col.id} col={col}>
@@ -298,65 +345,93 @@ export default function Sidebar({
           )}
         </div>
 
-        {/* Tags section (only when tags exist) */}
-        {allTags.length > 0 && (
+        {/* Tags section */}
+        {(displayTags.length > 0 || newTagOpen) && (
           <div className="sidebar-section">
             <div className="sidebar-section-header-row" onClick={toggleTags}>
               <span className="sidebar-section-label">Tags</span>
               <div className="sidebar-section-actions">
                 <button
-                  ref={tagSortBtnRef}
                   className="sidebar-section-action-btn"
-                  onClick={openTagSortMenu}
-                  title="Sort tags"
+                  onClick={(e) => { e.stopPropagation(); setNewTagOpen(true); setNewTagDraft(""); if (!tagsExpanded) toggleTags(); }}
+                  title="New tag"
                 >
-                  <Icons.ArrowUpDown size={14} />
+                  <Icons.Plus size={14} />
                 </button>
                 <button
                   className="sidebar-section-action-btn"
                   onClick={(e) => { e.stopPropagation(); toggleTags(); }}
                   title={tagsExpanded ? "Collapse tags" : "Expand tags"}
                 >
-                  {tagsExpanded
-                    ? <Icons.ChevronDown size={14} />
-                    : <Icons.ChevronRight size={14} />
-                  }
+                  {tagsExpanded ? <Icons.ChevronDown size={14} /> : <Icons.ChevronRight size={14} />}
                 </button>
               </div>
             </div>
-            {tagsExpanded && allTags.map((tag) => {
-              const count = items.filter((i) => i.tags.includes(tag)).length;
-              const isActive = activeView.type === "tag" && activeView.tag === tag;
-              const isRenaming = renamingTag === tag;
-              return (
-                <div
-                  key={tag}
-                  className={`nav-item${isActive ? " active" : ""}`}
-                  onClick={() => !isRenaming && onSelectTag(tag)}
-                  onContextMenu={(e) => handleTagContextMenu(e, tag)}
-                >
-                  <span className="nav-item-icon"><Icons.Hash size={20} /></span>
-                  {isRenaming ? (
+
+            {tagsExpanded && (
+              <>
+                {/* New tag input — appears at very top */}
+                {newTagOpen && (
+                  <div className="nav-item">
+                    <span className="nav-item-icon"><Icons.Hash size={20} /></span>
                     <input
                       className="sidebar-tag-rename-input"
-                      value={renameDraft}
+                      placeholder="tag name..."
+                      value={newTagDraft}
                       autoFocus
-                      onChange={(e) => setRenameDraft(e.target.value)}
+                      onChange={(e) => setNewTagDraft(e.target.value)}
                       onKeyDown={(e) => {
                         e.stopPropagation();
-                        if (e.key === "Enter") { e.preventDefault(); commitRename(tag); }
-                        else if (e.key === "Escape") { e.preventDefault(); setRenamingTag(null); }
+                        if (e.key === "Enter") { e.preventDefault(); commitNewTag(); }
+                        else if (e.key === "Escape") { e.preventDefault(); setNewTagOpen(false); setNewTagDraft(""); }
                       }}
-                      onBlur={() => commitRename(tag)}
+                      onBlur={() => { if (!newTagDraft.trim()) setNewTagOpen(false); }}
                       onClick={(e) => e.stopPropagation()}
                     />
-                  ) : (
-                    <span className="nav-item-label">{tag}</span>
-                  )}
-                  <span className="nav-item-count">{count}</span>
-                </div>
-              );
-            })}
+                  </div>
+                )}
+
+                {/* Draggable tag list */}
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTagDragEnd}>
+                  <SortableContext items={displayTags} strategy={verticalListSortingStrategy}>
+                    {displayTags.map((tag) => {
+                      const count = items.filter((i) => i.tags.includes(tag)).length;
+                      const isActive = activeView.type === "tag" && activeView.tag === tag;
+                      const isRenaming = renamingTag === tag;
+                      return (
+                        <SortableTagRow key={tag} tag={tag}>
+                          <div
+                            className={`nav-item${isActive ? " active" : ""}`}
+                            onClick={() => !isRenaming && onSelectTag(tag)}
+                            onContextMenu={(e) => handleTagContextMenu(e, tag)}
+                          >
+                            <span className="nav-item-icon"><Icons.Hash size={20} /></span>
+                            {isRenaming ? (
+                              <input
+                                className="sidebar-tag-rename-input"
+                                value={renameDraft}
+                                autoFocus
+                                onChange={(e) => setRenameDraft(e.target.value)}
+                                onKeyDown={(e) => {
+                                  e.stopPropagation();
+                                  if (e.key === "Enter") { e.preventDefault(); commitRename(tag); }
+                                  else if (e.key === "Escape") { e.preventDefault(); setRenamingTag(null); }
+                                }}
+                                onBlur={() => commitRename(tag)}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            ) : (
+                              <span className="nav-item-label">{tag}</span>
+                            )}
+                            <span className="nav-item-count">{count}</span>
+                          </div>
+                        </SortableTagRow>
+                      );
+                    })}
+                  </SortableContext>
+                </DndContext>
+              </>
+            )}
           </div>
         )}
 
@@ -412,38 +487,22 @@ export default function Sidebar({
             {
               icon: Icons.Pencil,
               label: "Rename",
-              action: () => {
-                setRenamingTag(tagMenu.tag);
-                setRenameDraft(tagMenu.tag);
-                setTagMenu(null);
-              },
+              action: () => { setRenamingTag(tagMenu.tag); setRenameDraft(tagMenu.tag); setTagMenu(null); },
             },
             {
               icon: Icons.Trash2,
               label: "Delete",
               danger: true,
-              action: () => {
-                onDeleteTag(tagMenu.tag);
-                setTagMenu(null);
-              },
+              action: () => { onDeleteTag(tagMenu.tag); setTagMenu(null); },
             },
+            "---",
+            { icon: Icons.ArrowDownAZ,  label: "Name A→Z",  checked: tagSort.by === "name"  && tagSort.dir === "asc",  action: () => { setTagSort({ by: "name",  dir: "asc"  }); setTagMenu(null); } },
+            { icon: Icons.ArrowUpAZ,    label: "Name Z→A",  checked: tagSort.by === "name"  && tagSort.dir === "desc", action: () => { setTagSort({ by: "name",  dir: "desc" }); setTagMenu(null); } },
+            { icon: Icons.ArrowDown01,  label: "Count ↑",   checked: tagSort.by === "count" && tagSort.dir === "asc",  action: () => { setTagSort({ by: "count", dir: "asc"  }); setTagMenu(null); } },
+            { icon: Icons.ArrowDown10,  label: "Count ↓",   checked: tagSort.by === "count" && tagSort.dir === "desc", action: () => { setTagSort({ by: "count", dir: "desc" }); setTagMenu(null); } },
+            { icon: Icons.GripVertical, label: "Manual",    checked: tagSort.by === "manual",                          action: () => { setTagSort({ by: "manual", dir: "asc" }); setTagMenu(null); } },
           ]}
           onClose={() => setTagMenu(null)}
-        />,
-        document.body
-      )}
-
-      {tagSortMenuPos && createPortal(
-        <ContextMenu
-          x={tagSortMenuPos.x}
-          y={tagSortMenuPos.y}
-          items={[
-            { icon: Icons.ArrowDownAZ, label: "Name A→Z",     checked: tagSort.by === "name"  && tagSort.dir === "asc",  action: () => { setTagSort({ by: "name",  dir: "asc"  }); setTagSortMenuPos(null); } },
-            { icon: Icons.ArrowUpAZ,  label: "Name Z→A",     checked: tagSort.by === "name"  && tagSort.dir === "desc", action: () => { setTagSort({ by: "name",  dir: "desc" }); setTagSortMenuPos(null); } },
-            { icon: Icons.ArrowDown01, label: "Count ↑",     checked: tagSort.by === "count" && tagSort.dir === "asc",  action: () => { setTagSort({ by: "count", dir: "asc"  }); setTagSortMenuPos(null); } },
-            { icon: Icons.ArrowDown10, label: "Count ↓",     checked: tagSort.by === "count" && tagSort.dir === "desc", action: () => { setTagSort({ by: "count", dir: "desc" }); setTagSortMenuPos(null); } },
-          ]}
-          onClose={() => setTagSortMenuPos(null)}
         />,
         document.body
       )}

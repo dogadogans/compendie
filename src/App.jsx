@@ -8,7 +8,7 @@ import {
   loadItems, addItem, updateItem, deleteItem, getImageUrl,
   loadCollections, addCollection, updateCollection, deleteCollection, archiveCollection,
   addFlow, updateFlow, reorderItems, reorderCollections,
-  bulkRenameTag, bulkDeleteTag,
+  loadGlobalTags, addGlobalTag, reorderGlobalTags, bulkRenameTag, bulkDeleteTag,
 } from "./store";
 import AddOverlay from "./components/AddOverlay";
 import ContextMenu from "./components/ContextMenu";
@@ -54,6 +54,7 @@ function buildSortMenuItems(sort, onSortChange) {
 export default function App() {
   const [items,        setItems]        = useState([]);
   const [collections,  setCollections]  = useState([]);
+  const [globalTags,   setGlobalTags]   = useState([]);
   const [imageUrls,    setImageUrls]    = useState({});
   const [search,       setSearch]       = useState("");
   const [activeView,   setActiveView]   = useState({ type: "all" });
@@ -118,6 +119,7 @@ export default function App() {
   useEffect(() => {
     loadItems().then(setItems).catch(console.error);
     loadCollections().then(setCollections).catch(console.error);
+    loadGlobalTags().then(setGlobalTags).catch(console.error);
   }, []);
 
   // Reset selection state whenever the active view changes
@@ -251,20 +253,45 @@ export default function App() {
     const updated = await updateItem(id, changes);
     setItems((prev) => prev.map((i) => (i.id === id ? updated : i)));
     setSelectedItem((prev) => (prev?.id === id ? updated : prev));
+    if (changes.tags) {
+      setGlobalTags((prev) => {
+        const newOnes = changes.tags.filter((t) => !prev.includes(t));
+        return newOnes.length ? [...newOnes, ...prev] : prev;
+      });
+    }
   }, []);
 
   const handleRenameTag = async (oldTag, newTag) => {
-    const updatedItems = await bulkRenameTag(oldTag, newTag);
+    const { items: updatedItems, globalTags: updatedGlobalTags } = await bulkRenameTag(oldTag, newTag);
     setItems(updatedItems);
+    setGlobalTags(updatedGlobalTags);
     if (activeView.type === "tag" && activeView.tag === oldTag)
       setActiveView({ type: "tag", tag: newTag });
   };
 
   const handleDeleteTag = async (tag) => {
-    const updatedItems = await bulkDeleteTag(tag);
+    const { items: updatedItems, globalTags: updatedGlobalTags } = await bulkDeleteTag(tag);
     setItems(updatedItems);
+    setGlobalTags(updatedGlobalTags);
     if (activeView.type === "tag" && activeView.tag === tag)
       setActiveView({ type: "all" });
+  };
+
+  const handleAddTag = async (tag) => {
+    const updated = await addGlobalTag(tag);
+    setGlobalTags(updated);
+  };
+
+  const handleReorderTags = async (newOrder) => {
+    const updated = await reorderGlobalTags(newOrder);
+    setGlobalTags(updated);
+  };
+
+  const handleNestCollection = async (collectionId, parentId) => {
+    if (collectionId === parentId) return;
+    await updateCollection(collectionId, { parent_id: parentId });
+    const updated = await loadCollections();
+    setCollections(updated);
   };
 
   const handleSaveFlow = async (data) => {
@@ -571,10 +598,11 @@ export default function App() {
     return ids;
   }, [collections]);
 
-  const allTags = useMemo(
-    () => [...new Set(items.flatMap((i) => i.tags))].sort(),
-    [items]
-  );
+  const allTags = useMemo(() => {
+    const fromItems = items.flatMap((i) => i.tags);
+    const extra = fromItems.filter((t) => !globalTags.includes(t));
+    return [...globalTags, ...new Set(extra)];
+  }, [globalTags, items]);
 
   const filtered = useMemo(() => items.filter((item) => {
     if (activeView.type === "unorganized" && item.collections.length > 0) return false;
@@ -653,8 +681,12 @@ export default function App() {
           onSelectUnorganized={() => setActiveView({ type: "unorganized" })}
           onSelectCollection={(id) => setActiveView({ type: "collection", id })}
           onSelectTag={(tag) => setActiveView({ type: "tag", tag })}
+          sidebarTags={allTags}
+          onAddTag={handleAddTag}
+          onReorderTags={handleReorderTags}
           onRenameTag={handleRenameTag}
           onDeleteTag={handleDeleteTag}
+          onNestCollection={handleNestCollection}
           onAddCollection={handleAddCollection}
           onContextMenu={handleCollectionContextMenu}
           collectionSort={collectionSort}

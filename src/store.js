@@ -32,6 +32,10 @@ async function loadData() {
   // Old formats (plain array or folders-based) → start fresh
   if (Array.isArray(parsed) || parsed.folders !== undefined)
     return { collections: [], items: [] };
+  // Migrate: derive globalTags from items if not present
+  if (!parsed.globalTags) {
+    parsed.globalTags = [...new Set((parsed.items || []).flatMap((i) => i.tags || []))].sort();
+  }
   return parsed;
 }
 
@@ -70,6 +74,10 @@ export async function addItem({ imageBytes, originalName, title, tags, collectio
     created_at: new Date().toISOString(),
   };
   data.items.unshift(item);
+  if (!data.globalTags) data.globalTags = [];
+  for (const tag of (tags || [])) {
+    if (!data.globalTags.includes(tag)) data.globalTags.push(tag);
+  }
   await saveData(data);
   return item;
 }
@@ -79,6 +87,12 @@ export async function updateItem(id, changes) {
   const idx  = data.items.findIndex((i) => i.id === id);
   if (idx === -1) throw new Error("Item not found");
   data.items[idx] = { ...data.items[idx], ...changes };
+  if (changes.tags) {
+    if (!data.globalTags) data.globalTags = [];
+    for (const tag of changes.tags) {
+      if (!data.globalTags.includes(tag)) data.globalTags.push(tag);
+    }
+  }
   await saveData(data);
   return data.items[idx];
 }
@@ -95,14 +109,37 @@ export async function deleteItem(id) {
   await saveData(data);
 }
 
+export async function loadGlobalTags() {
+  return (await loadData()).globalTags || [];
+}
+
+export async function addGlobalTag(tag) {
+  const data = await loadData();
+  if (!data.globalTags) data.globalTags = [];
+  if (!data.globalTags.includes(tag)) {
+    data.globalTags.unshift(tag);
+    await saveData(data);
+  }
+  return data.globalTags;
+}
+
+export async function reorderGlobalTags(newOrder) {
+  const data = await loadData();
+  data.globalTags = newOrder;
+  await saveData(data);
+  return data.globalTags;
+}
+
 export async function bulkRenameTag(oldTag, newTag) {
   const data = await loadData();
   data.items = data.items.map((item) => ({
     ...item,
     tags: item.tags.map((t) => (t === oldTag ? newTag : t)),
   }));
+  if (!data.globalTags) data.globalTags = [];
+  data.globalTags = data.globalTags.map((t) => (t === oldTag ? newTag : t));
   await saveData(data);
-  return data.items;
+  return { items: data.items, globalTags: data.globalTags };
 }
 
 export async function bulkDeleteTag(tag) {
@@ -111,8 +148,10 @@ export async function bulkDeleteTag(tag) {
     ...item,
     tags: item.tags.filter((t) => t !== tag),
   }));
+  if (!data.globalTags) data.globalTags = [];
+  data.globalTags = data.globalTags.filter((t) => t !== tag);
   await saveData(data);
-  return data.items;
+  return { items: data.items, globalTags: data.globalTags };
 }
 
 // Takes a full array of item IDs in their new desired order.
