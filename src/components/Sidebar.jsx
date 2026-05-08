@@ -7,13 +7,15 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from 
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-function SortableCollectionRow({ col, disabled, children }) {
+function SortableCollectionRow({ col, disabled, nestingActive, children }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: col.id, disabled });
+  // Freeze non-dragged items in place while user is hovering to nest — prevents jumpiness
+  const frozenTransform = (nestingActive && !isDragging) ? undefined : CSS.Transform.toString(transform);
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
+      style={{ transform: frozenTransform, transition: nestingActive && !isDragging ? "none" : transition, opacity: isDragging ? 0.5 : 1 }}
       {...(disabled ? {} : { ...attributes, ...listeners })}
     >
       {children}
@@ -87,7 +89,8 @@ export default function Sidebar({
   const [newTagOpen, setNewTagOpen] = useState(false);
   const [newTagDraft, setNewTagDraft] = useState("");
   const nestTimerRef = useRef(null);
-  const [nestTargetId, setNestTargetId] = useState(null);
+  const [nestTargetId, setNestTargetId] = useState(null);   // confirmed nest target (timer fired)
+  const [nestHoverId, setNestHoverId]   = useState(null);   // immediate hover highlight
 
   const displayTags = (() => {
     const tags = sidebarTags || [];
@@ -136,18 +139,24 @@ export default function Sidebar({
 
   const handleCollectionDragOver = ({ over, active }) => {
     clearTimeout(nestTimerRef.current);
-    if (!over || over.id === active?.id) { setNestTargetId(null); return; }
-    nestTimerRef.current = setTimeout(() => setNestTargetId(over.id), 700);
+    if (!over || over.id === active?.id) {
+      setNestHoverId(null);
+      setNestTargetId(null);
+      return;
+    }
+    setNestHoverId(over.id);
+    nestTimerRef.current = setTimeout(() => setNestTargetId(over.id), 1000);
   };
 
   const handleCollectionDragEnd = ({ active, over }) => {
     clearTimeout(nestTimerRef.current);
-    if (nestTargetId && nestTargetId !== active.id) {
+    const wasNesting = nestTargetId && nestTargetId !== active.id;
+    setNestTargetId(null);
+    setNestHoverId(null);
+    if (wasNesting) {
       onNestCollection(active.id, nestTargetId);
-      setNestTargetId(null);
       return;
     }
-    setNestTargetId(null);
     if (!over || active.id === over.id) return;
     const oldIndex = topLevel.findIndex((c) => c.id === active.id);
     const newIndex = topLevel.findIndex((c) => c.id === over.id);
@@ -220,7 +229,7 @@ export default function Sidebar({
       <div key={col.id} className="collection-row-wrap">
         <div
           data-collection-id={col.id}
-          className={`nav-item collection-item${isActive ? " active" : ""}${isChild ? " sub-item" : ""}${nestTargetId === col.id ? " nest-target" : ""}`}
+          className={`nav-item collection-item${isActive ? " active" : ""}${isChild ? " sub-item" : ""}${nestHoverId === col.id || nestTargetId === col.id ? " nest-target" : ""}`}
           onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, col); }}
         >
           {isChild ? (
@@ -336,7 +345,7 @@ export default function Sidebar({
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragOver={handleCollectionDragOver} onDragEnd={handleCollectionDragEnd}>
               <SortableContext items={topLevel.map((c) => c.id)} strategy={verticalListSortingStrategy}>
                 {topLevel.map((col) => (
-                  <SortableCollectionRow key={col.id} col={col}>
+                  <SortableCollectionRow key={col.id} col={col} nestingActive={!!nestTargetId}>
                     {renderCollection(col)}
                   </SortableCollectionRow>
                 ))}
