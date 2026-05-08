@@ -88,9 +88,7 @@ export default function Sidebar({
   const [tagSort, setTagSort] = useState({ by: "manual", dir: "asc" });
   const [newTagOpen, setNewTagOpen] = useState(false);
   const [newTagDraft, setNewTagDraft] = useState("");
-  const nestTimerRef = useRef(null);
-  const [nestTargetId, setNestTargetId] = useState(null);   // confirmed nest target (timer fired)
-  const [nestHoverId, setNestHoverId]   = useState(null);   // immediate hover highlight
+  const [nestHoverId, setNestHoverId] = useState(null); // folder highlighted for nesting
 
   const displayTags = (() => {
     const tags = sidebarTags || [];
@@ -137,24 +135,20 @@ export default function Sidebar({
     setTagSort({ by: "manual", dir: "asc" });
   };
 
-  const handleCollectionDragOver = ({ over, active }) => {
-    clearTimeout(nestTimerRef.current);
-    if (!over || over.id === active?.id) {
+  const handleCollectionDragMove = ({ delta, over, active }) => {
+    // Drag right ≥ 24px over a different item = nest mode, like Notion
+    if (delta.x >= 24 && over && over.id !== active.id) {
+      setNestHoverId(over.id);
+    } else {
       setNestHoverId(null);
-      setNestTargetId(null);
-      return;
     }
-    setNestHoverId(over.id);
-    nestTimerRef.current = setTimeout(() => setNestTargetId(over.id), 1000);
   };
 
   const handleCollectionDragEnd = ({ active, over }) => {
-    clearTimeout(nestTimerRef.current);
-    const wasNesting = nestTargetId && nestTargetId !== active.id;
-    setNestTargetId(null);
+    const wasNesting = nestHoverId && nestHoverId !== active.id;
     setNestHoverId(null);
     if (wasNesting) {
-      onNestCollection(active.id, nestTargetId);
+      onNestCollection(active.id, nestHoverId);
       return;
     }
     if (!over || active.id === over.id) return;
@@ -229,7 +223,7 @@ export default function Sidebar({
       <div key={col.id} className="collection-row-wrap">
         <div
           data-collection-id={col.id}
-          className={`nav-item collection-item${isActive ? " active" : ""}${isChild ? " sub-item" : ""}${nestHoverId === col.id || nestTargetId === col.id ? " nest-target" : ""}`}
+          className={`nav-item collection-item${isActive ? " active" : ""}${isChild ? " sub-item" : ""}${nestHoverId === col.id ? " nest-target" : ""}`}
           onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, col); }}
         >
           {isChild ? (
@@ -342,10 +336,10 @@ export default function Sidebar({
           </div>
 
           {!foldersCollapsed && (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragOver={handleCollectionDragOver} onDragEnd={handleCollectionDragEnd}>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragMove={handleCollectionDragMove} onDragEnd={handleCollectionDragEnd}>
               <SortableContext items={topLevel.map((c) => c.id)} strategy={verticalListSortingStrategy}>
                 {topLevel.map((col) => (
-                  <SortableCollectionRow key={col.id} col={col} nestingActive={!!nestTargetId}>
+                  <SortableCollectionRow key={col.id} col={col} nestingActive={!!nestHoverId}>
                     {renderCollection(col)}
                   </SortableCollectionRow>
                 ))}
