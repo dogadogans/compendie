@@ -296,6 +296,18 @@ html, body, #root { height: 100%; overflow: hidden; }
   flex-shrink: 0;
 }
 
+.sidebar-tag-rename-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--text);
+  outline: none;
+  font-size: 14px;
+  color: var(--text);
+  padding: 0;
+  min-width: 0;
+}
+
 /* ── Sidebar sections ────────────────────────────────────────────────────── */
 .sidebar-section {
   padding: 4px 8px;

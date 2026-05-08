@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { ExternalLink, FolderPlus, FolderMinus, Trash2 } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { arrayMove } from "@dnd-kit/sortable";
@@ -7,6 +8,7 @@ import {
   loadItems, addItem, updateItem, deleteItem, getImageUrl,
   loadCollections, addCollection, updateCollection, deleteCollection, archiveCollection,
   addFlow, updateFlow, reorderItems, reorderCollections,
+  bulkRenameTag, bulkDeleteTag,
 } from "./store";
 import AddOverlay from "./components/AddOverlay";
 import ContextMenu from "./components/ContextMenu";
@@ -21,6 +23,7 @@ import ActionsDropdown  from "./components/ActionsDropdown";
 import CollectionPicker from "./components/CollectionPicker";
 import QuickFolderModal from "./components/QuickFolderModal";
 import { AnimatePresence, motion } from "framer-motion";
+import { Toaster, toast } from "./components/Toast";
 import "./App.css";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif"];
@@ -68,6 +71,7 @@ export default function App() {
   const [pickerMode,        setPickerMode]         = useState(null); // "move" | "copy" | null
   const [bulkDeleteConfirm, setBulkDeleteConfirm]  = useState(false);
   const [quickFolderOpen,   setQuickFolderOpen]    = useState(false);
+  const [collectionPickerModal, setCollectionPickerModal] = useState(null); // { prefillName, itemId }
   const [collectionSort, setCollectionSort] = useState(() => {
     try {
       return (
@@ -95,6 +99,9 @@ export default function App() {
   const [sidebarHidden, setSidebarHidden] = useState(
     () => localStorage.getItem("compendie_sidebar_hidden") === "true"
   );
+  const [theme, setTheme] = useState(
+    () => localStorage.getItem("compendie_theme") || "dark"
+  );
   const itemsRef    = useRef(items); // always-current items for use in stable callbacks
   useEffect(() => { itemsRef.current = items; }, [items]);
   const dragCounter     = useRef(0);
@@ -102,6 +109,11 @@ export default function App() {
   const recentDropTimer = useRef(null);
   const fileInputRef = useRef(null);
   const loadedIds = useRef(new Set());
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("compendie_theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     loadItems().then(setItems).catch(console.error);
@@ -241,6 +253,20 @@ export default function App() {
     setSelectedItem((prev) => (prev?.id === id ? updated : prev));
   }, []);
 
+  const handleRenameTag = async (oldTag, newTag) => {
+    const updatedItems = await bulkRenameTag(oldTag, newTag);
+    setItems(updatedItems);
+    if (activeView.type === "tag" && activeView.tag === oldTag)
+      setActiveView({ type: "tag", tag: newTag });
+  };
+
+  const handleDeleteTag = async (tag) => {
+    const updatedItems = await bulkDeleteTag(tag);
+    setItems(updatedItems);
+    if (activeView.type === "tag" && activeView.tag === tag)
+      setActiveView({ type: "all" });
+  };
+
   const handleSaveFlow = async (data) => {
     const collectionIds = data.collections.length
       ? data.collections
@@ -375,6 +401,11 @@ export default function App() {
       setActiveView({ type: "all" });
   };
 
+  const handleUnarchiveCollection = async (id) => {
+    const updated = await updateCollection(id, { archived: false });
+    setCollections((prev) => prev.map((c) => (c.id === id ? updated : c)));
+  };
+
   const handleDeleteCollection = (id) => {
     const col = collections.find((c) => c.id === id);
     setDeleteConfirm({ id, name: col?.name ?? "" });
@@ -413,6 +444,20 @@ export default function App() {
     });
   }, []);
 
+  const handleReorderSubCollections = useCallback((newSubIds) => {
+    setCollections((prev) => {
+      const byId = new Map(prev.map(c => [c.id, c]));
+      const subSet = new Set(newSubIds);
+      // Verify all IDs exist before mutating
+      if (newSubIds.some(id => !byId.has(id))) return prev;
+      const newSubs = newSubIds.map(id => byId.get(id));
+      let subIdx = 0;
+      const result = prev.map(c => subSet.has(c.id) ? newSubs[subIdx++] : c);
+      reorderCollections(result.map(c => c.id)).catch(console.error);
+      return result;
+    });
+  }, []);
+
   // ── Sidebar resize ───────────────────────────────────────────────────────────
 
   const handleSidebarResizeStart = useCallback((e) => {
@@ -448,15 +493,20 @@ export default function App() {
 
   const handleCollectionContextMenu = (e, collection) => {
     openCtxMenu(e, [
-      ...(!collection.parent_id ? [{
+      ...(!collection.parent_id && !collection.archived ? [{
         label: "New folder",
         action: () => setNewFolderParentId(collection.id),
       }] : []),
       { label: "Edit…", action: () => setEditingCollection(collection) },
-      { label: "Archive", action: () => handleArchiveCollection(collection.id) },
-      { label: "Sort by", submenu: true,
-        action: () => openCtxMenu(e, buildSortMenuItems(collectionSort, handleSortChange)),
-      },
+      ...(collection.archived
+        ? [{ label: "Remove from Archive", action: () => handleUnarchiveCollection(collection.id) }]
+        : [
+            { label: "Archive", action: () => handleArchiveCollection(collection.id) },
+            { label: "Sort by", submenu: true,
+              action: () => openCtxMenu(e, buildSortMenuItems(collectionSort, handleSortChange)),
+            },
+          ]
+      ),
       "---",
       { label: "Delete", danger: true, action: () => handleDeleteCollection(collection.id) },
     ]);
@@ -479,14 +529,23 @@ export default function App() {
           const nonArchived = collections.filter((c) => !c.archived);
           setCtxMenu({
             x: e.clientX, y: e.clientY,
+            searchable: true,
+            onAddNew: (name) => {
+              setCollectionPickerModal({ prefillName: name, itemId: item.id });
+            },
             menuItems: nonArchived.map((c) => ({
               checked: item.collections.includes(c.id),
-              label: `${c.icon} ${c.name}`,
+              icon: LucideIcons[c.icon] ?? LucideIcons.Folder,
+              iconColor: c.color || undefined,
+              label: c.name,
               action: () => {
-                const next = item.collections.includes(c.id)
-                  ? item.collections.filter((id) => id !== c.id)
-                  : [...item.collections, c.id];
+                const adding = !item.collections.includes(c.id);
+                const next = adding
+                  ? [...item.collections, c.id]
+                  : item.collections.filter((id) => id !== c.id);
                 handleUpdate(item.id, { collections: next });
+                const label = item.title || item.image_path?.split("/").pop() || "Item";
+                if (adding) toast(`${label} added to ${c.name}`);
               },
             })),
           });
@@ -594,6 +653,8 @@ export default function App() {
           onSelectUnorganized={() => setActiveView({ type: "unorganized" })}
           onSelectCollection={(id) => setActiveView({ type: "collection", id })}
           onSelectTag={(tag) => setActiveView({ type: "tag", tag })}
+          onRenameTag={handleRenameTag}
+          onDeleteTag={handleDeleteTag}
           onAddCollection={handleAddCollection}
           onContextMenu={handleCollectionContextMenu}
           collectionSort={collectionSort}
@@ -603,6 +664,8 @@ export default function App() {
           width={sidebarWidth}
           isHidden={sidebarHidden}
           onToggleSidebar={handleToggleSidebar}
+          theme={theme}
+          onToggleTheme={() => setTheme(t => t === "dark" ? "light" : "dark")}
         />
 
       {!sidebarHidden && (
@@ -628,10 +691,12 @@ export default function App() {
           onSelectCollection={(id) => setActiveView({ type: "collection", id })}
           isDragging={isDragging}
           onReorder={handleReorder}
+          onReorderSubCollections={handleReorderSubCollections}
           onAddClick={() => setAddOverlayOpen(true)}
           onOptionsMenu={handleGridOptionsMenu}
           sidebarHidden={sidebarHidden}
           onToggleSidebar={handleToggleSidebar}
+          detailOpen={!!selectedItem}
           allTags={allTags}
           onSelectTag={(tag) => setActiveView({ type: "tag", tag })}
           organizeMode={organizeMode}
@@ -655,6 +720,8 @@ export default function App() {
             onDelete={handleDelete}
             onClose={() => setSelectedItem(null)}
             onNavigate={setSelectedItem}
+            onCreateCollection={(data) => handleAddCollection({ ...data, parentId: null })}
+            onAddNewCollection={(name) => setCollectionPickerModal({ prefillName: name, itemId: selectedItem.id })}
           />
         )}
 
@@ -708,6 +775,8 @@ export default function App() {
 
       {ctxMenu && (
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.menuItems}
+          searchable={ctxMenu.searchable}
+          onAddNew={ctxMenu.onAddNew}
           onClose={() => setCtxMenu(null)} />
       )}
 
@@ -733,6 +802,27 @@ export default function App() {
           onClose={() => setNewFolderParentId(null)}
         />
       )}
+
+      {collectionPickerModal && (
+        <CreateCollectionModal
+          initialData={{ name: collectionPickerModal.prefillName, icon: "Folder", color: "#f0b429" }}
+          onSave={async ({ name, icon, color }) => {
+            const col = await handleAddCollection({ name, icon, color, parentId: null });
+            const target = items.find((i) => i.id === collectionPickerModal.itemId);
+            if (target) {
+              await handleUpdate(collectionPickerModal.itemId, {
+                collections: [...target.collections, col.id],
+              });
+              const label = target.title || target.image_path?.split("/").pop() || "Item";
+              toast(`${label} added to ${col.name}`);
+            }
+            setCollectionPickerModal(null);
+          }}
+          onClose={() => setCollectionPickerModal(null)}
+        />
+      )}
+
+      <Toaster />
 
       {deleteConfirm && (
         <DeleteConfirmModal

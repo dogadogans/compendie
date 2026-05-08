@@ -95,6 +95,26 @@ export async function deleteItem(id) {
   await saveData(data);
 }
 
+export async function bulkRenameTag(oldTag, newTag) {
+  const data = await loadData();
+  data.items = data.items.map((item) => ({
+    ...item,
+    tags: item.tags.map((t) => (t === oldTag ? newTag : t)),
+  }));
+  await saveData(data);
+  return data.items;
+}
+
+export async function bulkDeleteTag(tag) {
+  const data = await loadData();
+  data.items = data.items.map((item) => ({
+    ...item,
+    tags: item.tags.filter((t) => t !== tag),
+  }));
+  await saveData(data);
+  return data.items;
+}
+
 // Takes a full array of item IDs in their new desired order.
 // Reorders data.items to match, then saves.
 export async function reorderItems(newOrderedIds) {
