@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import * as Icons from "lucide-react";
 import CreateCollectionModal from "./CreateCollectionModal";
