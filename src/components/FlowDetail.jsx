@@ -30,6 +30,71 @@ export default function FlowDetail({
   const [dragDelta,  setDragDelta]  = useState(0);
   const [isSnapping, setIsSnapping] = useState(true);
 
+  const [title,       setTitle]       = useState(flow.title);
+  const [tags,        setTags]        = useState(flow.tags  ?? []);
+  const [note,        setNote]        = useState(flow.note  ?? "");
+  const [colPickerPos, setColPickerPos] = useState(null);
+
+  const titleRef  = useRef(null);
+  const noteRef   = useRef(null);
+  const colBtnRef = useRef(null);
+
+  const autoResize = (el) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  };
+
+  const saveTitle = () => {
+    const t = (titleRef.current?.innerText ?? "").replace(/\n/g, " ").trim();
+    if (t !== flow.title) onUpdate(flow.id, { title: t });
+  };
+  const saveNote = () => { if (note !== flow.note) onUpdate(flow.id, { note }); };
+
+  const addTag = (t) => {
+    const cleaned = t.trim().toLowerCase();
+    if (!cleaned || tags.includes(cleaned)) return;
+    const next = [...tags, cleaned];
+    setTags(next);
+    onUpdate(flow.id, { tags: next });
+  };
+  const removeTag = (t) => {
+    const next = tags.filter((x) => x !== t);
+    setTags(next);
+    onUpdate(flow.id, { tags: next });
+  };
+  const renameTag = (oldTag, newTag) => {
+    const cleaned = newTag.trim().toLowerCase();
+    if (!cleaned || cleaned === oldTag || tags.includes(cleaned)) return;
+    const next = tags.map((tg) => (tg === oldTag ? cleaned : tg));
+    setTags(next);
+    onUpdate(flow.id, { tags: next });
+  };
+
+  const toggleCollection = (colId) => {
+    const next = flow.collections.includes(colId)
+      ? flow.collections.filter((id) => id !== colId)
+      : [...flow.collections, colId];
+    onUpdate(flow.id, { collections: next });
+  };
+
+  const openColPicker = () => {
+    const rect = colBtnRef.current?.getBoundingClientRect();
+    if (rect) setColPickerPos({ x: rect.left, y: rect.bottom + 4 });
+  };
+
+  const activeCollections = (collections ?? []).filter((c) => flow.collections.includes(c.id));
+
+  const colMenuItems = (collections ?? [])
+    .filter((c) => !c.archived)
+    .map((c) => ({
+      icon: LucideIcons[c.icon] ?? LucideIcons.Folder,
+      iconColor: c.color || undefined,
+      label: c.name,
+      checked: flow.collections.includes(c.id),
+      action: () => toggleCollection(c.id),
+    }));
+
   const dotBtnRef = useRef(null);
 
   const hasPrev = selectedIdx > 0;
@@ -42,7 +107,13 @@ export default function FlowDetail({
   // Reset to first screen when flow changes
   useEffect(() => {
     setSelectedIdx(0);
+    setTitle(flow.title);
+    setTags(flow.tags  ?? []);
+    setNote(flow.note  ?? "");
+    setColPickerPos(null);
     setDotMenuPos(null);
+    if (titleRef.current) titleRef.current.innerText = flow.title || "";
+    requestAnimationFrame(() => autoResize(noteRef.current));
   }, [flow.id]);
 
   // Keyboard navigation
@@ -219,14 +290,80 @@ export default function FlowDetail({
             )}
           </div>
 
-          {/* Metadata panel — placeholder, filled in Task 4 */}
+          {/* Metadata panel */}
           {!metaHidden && (
             <>
               <div className="detail-meta-resize-handle" onMouseDown={handleMetaResizeStart} />
               <div className="detail-meta-side" style={{ width: metaWidth, flex: "none" }}>
+
+                <div className="detail-meta-title-row" onClick={() => titleRef.current?.focus()}>
+                  <div
+                    ref={titleRef}
+                    className="detail-meta-title"
+                    contentEditable
+                    suppressContentEditableWarning
+                    data-placeholder="Untitled flow"
+                    onInput={(e) => {
+                      const text = e.currentTarget.innerText.replace(/\n/g, " ");
+                      if (text.length > 120) {
+                        e.currentTarget.innerText = text.slice(0, 120);
+                        const range = document.createRange();
+                        range.selectNodeContents(e.currentTarget);
+                        range.collapse(false);
+                        const sel = window.getSelection();
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                      }
+                      setTitle(e.currentTarget.innerText);
+                    }}
+                    onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+                    onBlur={saveTitle}
+                  />
+                </div>
+
+                <textarea
+                  ref={noteRef}
+                  className="detail-meta-note"
+                  placeholder="no notes"
+                  value={note}
+                  maxLength={1000}
+                  style={{ fontSize: note.length < 600 ? 14 : Math.max(11, 14 - ((note.length - 600) / 400) * 3) + "px" }}
+                  onChange={(e) => { setNote(e.target.value); autoResize(e.target); }}
+                  onBlur={saveNote}
+                />
+
+                <div className="detail-meta-divider" />
+
+                <span className="detail-meta-label">Collections</span>
+                <div className="detail-pills-row">
+                  {activeCollections.map((col) => (
+                    <CollectionChip
+                      key={col.id}
+                      name={col.name}
+                      color={col.color}
+                      icon={col.icon}
+                      onRemove={() => toggleCollection(col.id)}
+                    />
+                  ))}
+                  <button ref={colBtnRef} className="detail-add-btn" onClick={openColPicker}>
+                    <LucideIcons.Plus size={16} />
+                  </button>
+                </div>
+
+                <span className="detail-meta-label" style={{ marginTop: "14px" }}>Tags</span>
+                <TagInputBox
+                  compact
+                  tags={tags}
+                  allTags={allTags}
+                  onAdd={addTag}
+                  onRemove={removeTag}
+                  onRename={renameTag}
+                />
+
                 <div className="detail-meta-footer">
                   <p className="panel-date">{formattedDate}</p>
                 </div>
+
               </div>
             </>
           )}
@@ -241,6 +378,24 @@ export default function FlowDetail({
             y={dotMenuPos.y}
             items={dotMenuItems}
             onClose={() => setDotMenuPos(null)}
+          />
+        </div>,
+        document.body
+      )}
+
+      {/* Collection picker portal */}
+      {colPickerPos && createPortal(
+        <div onClick={(e) => e.stopPropagation()}>
+          <ContextMenu
+            x={colPickerPos.x}
+            y={colPickerPos.y}
+            items={colMenuItems}
+            searchable
+            onAddNew={(name) => {
+              setColPickerPos(null);
+              onAddNewCollection?.(name);
+            }}
+            onClose={() => setColPickerPos(null)}
           />
         </div>,
         document.body
