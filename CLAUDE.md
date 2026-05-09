@@ -6,6 +6,14 @@
 
 ---
 
+## Design Engineering
+
+When building any new UI component, adding animations, hover states, transitions, or interactive feedback — always invoke the `emil-design-eng` skill first. It encodes the philosophy on what makes interfaces feel right: correct easing, button press feedback, modal entry animations, hover media queries, and the invisible details that compound into something people love.
+
+Skill location: `.claude/skills/emil-design-eng/SKILL.md`
+
+---
+
 ## The problem
 
 You screenshot something interesting and it disappears into your downloads folder forever. You capture a UI flow and the screens pile up as unrelated images in Figma. No tags, no visual grid, no way to find things or see them in sequence. mymind costs money. Eagle is too heavy. Mobbin is too expensive. Tome is yours — calm, local, intentional, and open source.

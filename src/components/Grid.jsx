@@ -4,7 +4,7 @@ import {
   DndContext, DragOverlay, PointerSensor,
   useSensor, useSensors, closestCenter,
 } from "@dnd-kit/core";
-import { SortableContext, arrayMove } from "@dnd-kit/sortable";
+import { SortableContext, arrayMove, useSortable } from "@dnd-kit/sortable";
 import * as Icons from "lucide-react";
 import FlowCard from "./FlowCard";
 import SortableCard from "./SortableCard";
@@ -14,6 +14,26 @@ function SubColIcon({ icon, color, size = 18 }) {
   const Ic = Icons[icon];
   if (Ic) return <Ic size={size} color={color || "var(--muted)"} />;
   return <span style={{ fontSize: size }}>{icon || "📁"}</span>;
+}
+
+function SortableSubfolderCard({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      style={{
+        transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0) scaleX(${transform.scaleX ?? 1}) scaleY(${transform.scaleY ?? 1})` : undefined,
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+        cursor: "grab",
+        touchAction: "none",
+      }}
+    >
+      {children}
+    </div>
+  );
 }
 
 const ZOOM_MIN = 150;
@@ -190,7 +210,6 @@ function SearchBox({ search, onSearch, collections = [], allItems = [], allTags 
                 >
                   <span className="search-dd-dot" style={{ background: col.color || "var(--muted)" }} />
                   <span className="search-dd-label">{col.name}</span>
-                  <span className="search-dd-meta">Collection</span>
                 </button>
               ))}
             </div>
@@ -237,6 +256,7 @@ export default function Grid({
   onSelectTag = () => {},
   isDragging,
   onReorder,
+  onReorderSubCollections,
   onAddClick,
   onOptionsMenu,
   sidebarHidden,
@@ -245,12 +265,14 @@ export default function Grid({
   organizeMode = false,
   selectedIds = new Set(),
   onToggleSelect,
+  detailOpen = false,
 }) {
   const [activeTab, setActiveTab] = useState("images");
   const [activeId, setActiveId] = useState(null);
   const [overId, setOverId] = useState(null);
   const [zoom, setZoom] = useState(loadZoom);
   const [isZooming, setIsZooming] = useState(false);
+  const [activeSubId, setActiveSubId] = useState(null);
   const zoomTimerRef = useRef(null);
 
   function changeZoom(newZoom) {
@@ -283,15 +305,22 @@ export default function Grid({
     onReorder(active.id, over.id);
   }
 
-  // Reset tab to "images" whenever the active collection changes
+  const gridAreaRef = useRef(null);
+
+  // Reset tab and scroll position whenever the active view changes
   useEffect(() => {
     setActiveTab("images");
+    if (gridAreaRef.current) gridAreaRef.current.scrollTop = 0;
   }, [activeView]);
+
+  const detailOpenRef = useRef(false);
+  useEffect(() => { detailOpenRef.current = detailOpen; }, [detailOpen]);
 
   // Ctrl+wheel → zoom in/out (like Photoshop)
   useEffect(() => {
     const onWheel = (e) => {
       if (!e.ctrlKey) return;
+      if (detailOpenRef.current) return;
       e.preventDefault();
       // deltaY > 0 = scroll down = zoom out (smaller images)
       setZoom((prev) => {
@@ -363,7 +392,7 @@ export default function Grid({
   const activeItem = activeId ? items.find((i) => i.id === activeId) : null;
 
   return (
-    <div className="grid-area">
+    <div className="grid-area" ref={gridAreaRef}>
       <header className="toolbar">
         {/* Left: optional sidebar toggle + view icon + name + count + add button */}
         <div className="toolbar-left">
@@ -412,31 +441,71 @@ export default function Grid({
 
       {/* Below toolbar: sub-collections and tabs */}
       {subCollections.length > 0 && (
-        <div className="subfolder-row">
-          {subCollections.map(col => {
-            const count = allItems.filter(i => i.collections.includes(col.id)).length;
-            return (
-              <div key={col.id} className="subfolder-card" onClick={() => onSelectCollection(col.id)}>
-                <div className="subfolder-card-top">
-                  <SubColIcon icon={col.icon} color={col.color} />
-                  <button
-                    className="subfolder-dots"
-                    onClick={(e) => { e.stopPropagation(); onCollectionContextMenu?.(e, col); }}
-                  >
-                    <DotsIcon />
-                  </button>
-                </div>
-                <div className="subfolder-card-bottom">
-                  <span className="subfolder-name">{col.name}</span>
-                  <span className="subfolder-count">{count} {count === 1 ? "Image" : "Images"}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={({ active }) => setActiveSubId(active.id)}
+          onDragEnd={({ active, over }) => {
+            setActiveSubId(null);
+            if (!over || active.id === over.id) return;
+            const oldIdx = subCollections.findIndex(c => c.id === active.id);
+            const newIdx = subCollections.findIndex(c => c.id === over.id);
+            const reordered = arrayMove(subCollections, oldIdx, newIdx);
+            onReorderSubCollections?.(reordered.map(c => c.id));
+          }}
+          onDragCancel={() => setActiveSubId(null)}
+        >
+          <SortableContext items={subCollections.map(c => c.id)}>
+            <div className="subfolder-row">
+              {subCollections.map(col => {
+                const count = allItems.filter(i => i.collections.includes(col.id)).length;
+                return (
+                  <SortableSubfolderCard key={col.id} id={col.id}>
+                    <div className="subfolder-card" onClick={() => onSelectCollection(col.id)}>
+                      <div className="subfolder-card-top">
+                        <SubColIcon icon={col.icon} color={col.color} />
+                        <button
+                          className="subfolder-dots"
+                          onClick={(e) => { e.stopPropagation(); onCollectionContextMenu?.(e, col); }}
+                        >
+                          <DotsIcon />
+                        </button>
+                      </div>
+                      <div className="subfolder-card-bottom">
+                        <span className="subfolder-name">{col.name}</span>
+                        <span className="subfolder-count">{count} {count === 1 ? "Image" : "Images"}</span>
+                      </div>
+                    </div>
+                  </SortableSubfolderCard>
+                );
+              })}
+            </div>
+          </SortableContext>
+
+          {createPortal(
+            <DragOverlay dropAnimation={null}>
+              {activeSubId && subCollections.find(c => c.id === activeSubId) && (() => {
+                const col = subCollections.find(c => c.id === activeSubId);
+                const count = allItems.filter(i => i.collections.includes(col.id)).length;
+                return (
+                  <div className="subfolder-card" style={{ pointerEvents: "none", boxShadow: "0 8px 24px rgba(0,0,0,0.18)" }}>
+                    <div className="subfolder-card-top">
+                      <SubColIcon icon={col.icon} color={col.color} />
+                    </div>
+                    <div className="subfolder-card-bottom">
+                      <span className="subfolder-name">{col.name}</span>
+                      <span className="subfolder-count">{count} {count === 1 ? "Image" : "Images"}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </DragOverlay>,
+            document.body
+          )}
+        </DndContext>
       )}
       {inCollection && (
-        <div className="collection-tabs" style={{ padding: "0 20px 8px" }}>
+        <div className="collection-tabs" style={subCollections.length === 0 ? { marginTop: 0 } : undefined}>
           <button
             className={`tab-btn${activeTab === "images" ? " active" : ""}`}
             onClick={() => setActiveTab("images")}

@@ -748,33 +748,66 @@ export default function App() {
             if (files.length) setPendingFiles((prev) => [...prev, ...files]);
             e.target.value = "";
           }} />
-        {selectedItem && pendingFiles.length === 0 && (
-          <DetailPanel
-            item={selectedItem}
-            allItems={filtered}
-            imageUrls={imageUrls}
-            collections={collections}
-            allTags={allTags}
-            onUpdate={handleUpdate}
-            onDelete={(id) => {
-              const it = itemsRef.current.find((i) => i.id === id);
-              setAlertDialog({
-                title: it?.type === "flow" ? "Delete this flow?" : "Delete this image?",
-                message: it?.type === "flow"
-                  ? "This will permanently remove the flow and all its screens from Tome."
-                  : "This will permanently remove the image from Tome.",
-                confirmLabel: "Delete",
-                onConfirm: () => { setAlertDialog(null); handleDelete(id); },
-              });
-            }}
-            onClose={() => setSelectedItem(null)}
-            onNavigate={(item) => {
-              if (item.type === "flow") { setSelectedItem(null); setFlowDetail(item); }
-              else setSelectedItem(item);
-            }}
-            onCreateCollection={(data) => handleAddCollection({ ...data, parentId: null })}
-            onAddNewCollection={(name) => setCollectionPickerModal({ prefillName: name, itemId: selectedItem.id })}
-          />
+        {(selectedItem || flowDetail) && !flowBuilder && pendingFiles.length === 0 && (
+          <div
+            className="detail-backdrop"
+            onClick={() => { setSelectedItem(null); setFlowDetail(null); }}
+          >
+            {flowDetail ? (
+              <FlowDetail
+                flow={flowDetail}
+                allItems={filtered}
+                imageUrls={imageUrls}
+                collections={collections}
+                allTags={allTags}
+                onUpdate={(id, patch) => {
+                  handleUpdate(id, patch);
+                  setFlowDetail((prev) => (prev?.id === id ? { ...prev, ...patch } : prev));
+                }}
+                onDelete={(id) => {
+                  setAlertDialog({
+                    title: "Delete this flow?",
+                    message: "This will permanently remove the flow and all its screens from Tome.",
+                    confirmLabel: "Delete",
+                    onConfirm: () => { setAlertDialog(null); handleDelete(id); setFlowDetail(null); },
+                  });
+                }}
+                onClose={() => setFlowDetail(null)}
+                onNavigate={(item) => {
+                  if (item.type === "flow") setFlowDetail(item);
+                  else { setFlowDetail(null); setSelectedItem(item); }
+                }}
+                onAddNewCollection={(name) => setCollectionPickerModal({ prefillName: name, itemId: flowDetail.id })}
+              />
+            ) : (
+              <DetailPanel
+                item={selectedItem}
+                allItems={filtered}
+                imageUrls={imageUrls}
+                collections={collections}
+                allTags={allTags}
+                onUpdate={handleUpdate}
+                onDelete={(id) => {
+                  const it = itemsRef.current.find((i) => i.id === id);
+                  setAlertDialog({
+                    title: it?.type === "flow" ? "Delete this flow?" : "Delete this image?",
+                    message: it?.type === "flow"
+                      ? "This will permanently remove the flow and all its screens from Tome."
+                      : "This will permanently remove the image from Tome.",
+                    confirmLabel: "Delete",
+                    onConfirm: () => { setAlertDialog(null); handleDelete(id); },
+                  });
+                }}
+                onClose={() => setSelectedItem(null)}
+                onNavigate={(item) => {
+                  if (item.type === "flow") { setSelectedItem(null); setFlowDetail(item); }
+                  else setSelectedItem(item);
+                }}
+                onCreateCollection={(data) => handleAddCollection({ ...data, parentId: null })}
+                onAddNewCollection={(name) => setCollectionPickerModal({ prefillName: name, itemId: selectedItem.id })}
+              />
+            )}
+          </div>
         )}
 
         <AnimatePresence>
@@ -932,33 +965,6 @@ export default function App() {
         />
       )}
 
-      {flowDetail && !flowBuilder && (
-        <FlowDetail
-          flow={flowDetail}
-          allItems={filtered}
-          imageUrls={imageUrls}
-          collections={collections}
-          allTags={allTags}
-          onUpdate={(id, patch) => {
-            handleUpdate(id, patch);
-            setFlowDetail((prev) => (prev?.id === id ? { ...prev, ...patch } : prev));
-          }}
-          onDelete={(id) => {
-            setAlertDialog({
-              title: "Delete this flow?",
-              message: "This will permanently remove the flow and all its screens from Tome.",
-              confirmLabel: "Delete",
-              onConfirm: () => { setAlertDialog(null); handleDelete(id); setFlowDetail(null); },
-            });
-          }}
-          onClose={() => setFlowDetail(null)}
-          onNavigate={(item) => {
-            if (item.type === "flow") setFlowDetail(item);
-            else { setFlowDetail(null); setSelectedItem(item); }
-          }}
-          onAddNewCollection={(name) => setCollectionPickerModal({ prefillName: name, itemId: flowDetail.id })}
-        />
-      )}
 
     </div>
   );

@@ -2124,7 +2124,7 @@ html, body, #root { height: 100%; overflow: hidden; }
 }
 
 .flow-carousel-card--adjacent {
-  opacity: 0.35;
+  opacity: 0.55;
 }
 
 .flow-carousel-placeholder {

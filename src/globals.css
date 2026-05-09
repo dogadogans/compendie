@@ -91,6 +91,132 @@
   --orange-950: #471B03;
 }
 
+/* ── Easing ───────────────────────────────────────────────────────────────── */
+:root {
+  --ease-out:    cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+/* ── Alpha tokens ─────────────────────────────────────────────────────────── */
+:root {
+  --alpha-black-50:  rgba(0,0,0,0.03);
+  --alpha-black-100: rgba(0,0,0,0.05);
+  --alpha-black-200: rgba(0,0,0,0.08);
+  --alpha-black-300: rgba(0,0,0,0.10);
+  --alpha-black-400: rgba(0,0,0,0.14);
+  --alpha-black-500: rgba(0,0,0,0.21);
+  --alpha-black-600: rgba(0,0,0,0.34);
+  --alpha-black-700: rgba(0,0,0,0.44);
+  --alpha-black-800: rgba(0,0,0,0.51);
+  --alpha-black-900: rgba(0,0,0,0.61);
+
+  --alpha-white-50:  rgba(255,255,255,0.03);
+  --alpha-white-100: rgba(255,255,255,0.06);
+  --alpha-white-200: rgba(255,255,255,0.09);
+  --alpha-white-300: rgba(255,255,255,0.13);
+  --alpha-white-400: rgba(255,255,255,0.16);
+  --alpha-white-500: rgba(255,255,255,0.24);
+  --alpha-white-600: rgba(255,255,255,0.34);
+  --alpha-white-700: rgba(255,255,255,0.44);
+  --alpha-white-800: rgba(255,255,255,0.51);
+  --alpha-white-900: rgba(255,255,255,0.61);
+}
+
+/* ── Shadow tokens — dark (default) ──────────────────────────────────────── */
+:root {
+  --shadow-border-subtle: 0 0 0 1px rgba(255,255,255,0.08);
+  --shadow-border:        0 0 0 1px rgba(255,255,255,0.12);
+  --shadow-border-strong: 0 0 0 1px rgba(255,255,255,0.18);
+
+  --shadow-xs: 0 0 0 1px rgba(255,255,255,0.08),
+               0 1px 2px rgba(0,0,0,0.20);
+
+  --shadow-sm: 0 0 0 1px rgba(255,255,255,0.10),
+               0 1px 3px rgba(0,0,0,0.20),
+               0 2px 6px rgba(0,0,0,0.15);
+
+  --shadow-md: 0 0 0 1px rgba(255,255,255,0.08),
+               0 2px 4px rgba(0,0,0,0.30),
+               0 4px 8px rgba(0,0,0,0.20);
+
+  --shadow-lg: 0 0 0 1px rgba(255,255,255,0.06),
+               0 4px 8px rgba(0,0,0,0.40),
+               0 8px 24px rgba(0,0,0,0.30);
+
+  --shadow-xl: 0 0 0 1px rgba(255,255,255,0.05),
+               0 8px 16px rgba(0,0,0,0.50),
+               0 16px 48px rgba(0,0,0,0.40),
+               0 24px 64px rgba(0,0,0,0.30);
+
+  --shadow-inset-xs: inset 0 0 0 1px rgba(255,255,255,0.10),
+                     inset 0 1px 2px rgba(0,0,0,0.30);
+
+  --shadow-inset-sm: inset 0 0 0 1px rgba(255,255,255,0.10),
+                     inset 0 1px 3px rgba(0,0,0,0.40),
+                     inset 0 2px 6px rgba(0,0,0,0.25);
+
+  --shadow-inset-md: inset 0 0 0 1px rgba(255,255,255,0.08),
+                     inset 0 2px 6px rgba(0,0,0,0.40),
+                     inset 0 4px 12px rgba(0,0,0,0.30);
+
+  --shadow-inset-lg: inset 0 0 0 1px rgba(255,255,255,0.08),
+                     inset 0 2px 8px rgba(0,0,0,0.45),
+                     inset 0 6px 16px rgba(0,0,0,0.35),
+                     inset 0 8px 24px rgba(0,0,0,0.25);
+
+  --shadow-inset-top: inset 0 1px 0 rgba(0,0,0,0.40);
+}
+
+/* ── Shadow tokens — light ────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --shadow-border-subtle: 0 0 0 1px rgba(0,0,0,0.08);
+  --shadow-border:        0 0 0 1px rgba(0,0,0,0.12);
+  --shadow-border-strong: 0 0 0 1px rgba(0,0,0,0.18);
+
+  --shadow-xs: 0 0 0 1px rgba(0,0,0,0.12),
+               0 1px 2px rgba(0,0,0,0.04);
+
+  --shadow-sm: 0 0 0 1px rgba(0,0,0,0.10),
+               0 1px 3px rgba(0,0,0,0.05),
+               0 2px 6px rgba(0,0,0,0.03);
+
+  --shadow-md: 0 0 0 1px rgba(0,0,0,0.08),
+               0 2px 4px rgba(0,0,0,0.06),
+               0 4px 8px rgba(0,0,0,0.04);
+
+  --shadow-lg: 0 0 0 1px rgba(0,0,0,0.06),
+               0 4px 8px rgba(0,0,0,0.06),
+               0 8px 24px rgba(0,0,0,0.08);
+
+  --shadow-xl: 0 0 0 1px rgba(0,0,0,0.05),
+               0 8px 16px rgba(0,0,0,0.05),
+               0 16px 48px rgba(0,0,0,0.08),
+               0 24px 64px rgba(0,0,0,0.06);
+
+  --shadow-inset-xs: inset 0 0 0 1px rgba(0,0,0,0.12),
+                     inset 0 1px 2px rgba(0,0,0,0.06);
+
+  --shadow-inset-sm: inset 0 0 0 1px rgba(0,0,0,0.12),
+                     inset 0 1px 3px rgba(0,0,0,0.08),
+                     inset 0 2px 6px rgba(0,0,0,0.04);
+
+  --shadow-inset-md: inset 0 0 0 1px rgba(0,0,0,0.10),
+                     inset 0 2px 6px rgba(0,0,0,0.08),
+                     inset 0 4px 12px rgba(0,0,0,0.05);
+
+  --shadow-inset-lg: inset 0 0 0 1px rgba(0,0,0,0.10),
+                     inset 0 2px 8px rgba(0,0,0,0.08),
+                     inset 0 6px 16px rgba(0,0,0,0.06),
+                     inset 0 8px 24px rgba(0,0,0,0.04);
+
+  --shadow-inset-top: inset 0 1px 0 rgba(0,0,0,0.08);
+}
+
+/* ── Typography utilities ─────────────────────────────────────────────────── */
+.text-sm   { font-size: 14px; line-height: 20px; }
+.text-xs   { font-size: 12px; line-height: 16px; }
+.text-base { font-size: 16px; line-height: 24px; }
+
 /* Suppress all selection/drag while pointer-dragging a list item */
 body.dragging *,
 body.dragging img {

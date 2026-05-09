@@ -1,4 +1,8 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import * as LucideIcons from "lucide-react";
+import { TagChip, CollectionChip } from "./ui";
+import ContextMenu from "./ContextMenu";
 
 const THUMB_COLORS = ["#e8e4dc", "#d4e8e0", "#dce4e8", "#e8dce4", "#e8e8dc"];
 function thumbBg(i) { return THUMB_COLORS[i % THUMB_COLORS.length]; }
@@ -12,37 +16,43 @@ function getItemTranslate(i, src, dst, itemHeight) {
 
 function makeMeta(file) {
   return {
-    title:      file ? file.name.replace(/\.[^/.]+$/, "") : "",
-    tags:       [],
-    tagInput:   "",
-    collectionId: "",
-    note:       "",
+    title:         file ? file.name.replace(/\.[^/.]+$/, "") : "",
+    tags:          [],
+    tagInput:      "",
+    collectionIds: [],
+    note:          "",
   };
 }
 
 export default function AddOverlay({
   imageFiles,
   collections,
+  allTags = [],
   onSave,
   onSaveFlow,
   onCancel,
   onRemoveFile,
   onReorderFiles,
   onAddFiles,
+  onCreateCollection,
 }) {
   const [mode,             setMode]             = useState("image");
   const [selectedIdx,      setSelectedIdx]      = useState(0);
   const [imageMetas,       setImageMetas]       = useState(() => imageFiles.map(makeMeta));
-  const [flowTitle,        setFlowTitle]        = useState("");
-  const [flowTagInput,     setFlowTagInput]     = useState("");
-  const [flowTags,         setFlowTags]         = useState([]);
-  const [flowCollectionId, setFlowCollectionId] = useState("");
+  const [flowTitle,          setFlowTitle]          = useState("");
+  const [flowTagInput,       setFlowTagInput]       = useState("");
+  const [flowTags,           setFlowTags]           = useState([]);
+  const [flowCollectionIds,  setFlowCollectionIds]  = useState([]);
   const [flowScreenIdx,    setFlowScreenIdx]    = useState(null); // which screen note is open
   const [previewUrls,      setPreviewUrls]      = useState([]);
-  const [saving,      setSaving]      = useState(false);
-  const [dragActive,  setDragActive]  = useState(false);
+  const [saving,        setSaving]        = useState(false);
+  const [dragActive,    setDragActive]    = useState(false);
   const [dragOverIdx, setDragOverIdx] = useState(null);
   // Pointer-based lift drag — direct DOM updates for ghost position (no re-render on move)
+  const [tagPickerPos, setTagPickerPos] = useState(null);
+  const [colPickerPos, setColPickerPos] = useState(null);
+  const tagBtnRef = useRef(null);
+  const colBtnRef = useRef(null);
   const drag     = useRef({ active: false, srcIdx: null, overIdx: null, offsetX: 0, offsetY: 0, files: [], itemHeight: 0 });
   const ghostRef = useRef(null);
   const listRef  = useRef(null);
@@ -56,6 +66,8 @@ export default function AddOverlay({
     });
     setSelectedIdx((prev) => Math.min(prev, Math.max(0, imageFiles.length - 1)));
   }, [imageFiles]);
+
+  useEffect(() => { setTagPickerPos(null); setColPickerPos(null); }, [selectedIdx, mode]);
 
   useEffect(() => {
     const urls = imageFiles.map((f) => URL.createObjectURL(f));
@@ -169,21 +181,24 @@ export default function AddOverlay({
           screens:     imageFiles.map((f) => ({ file: f })),
           tags:        flowTags,
           note:        "",
-          collections: flowCollectionId ? [flowCollectionId] : [],
+          collections: flowCollectionIds,
         });
       } else {
         const dataList = await Promise.all(
           imageFiles.map(async (f, i) => ({
-            imageBytes:   new Uint8Array(await f.arrayBuffer()),
-            originalName: f.name,
-            title:        imageMetas[i]?.title       ?? "",
-            tags:         imageMetas[i]?.tags        ?? [],
-            note:         imageMetas[i]?.note        ?? "",
-            collectionId: imageMetas[i]?.collectionId || null,
+            imageBytes:    new Uint8Array(await f.arrayBuffer()),
+            originalName:  f.name,
+            title:         imageMetas[i]?.title         ?? "",
+            tags:          imageMetas[i]?.tags          ?? [],
+            note:          imageMetas[i]?.note          ?? "",
+            collectionIds: imageMetas[i]?.collectionIds ?? [],
           }))
         );
         await onSave(dataList);
       }
+    } catch (e) {
+      console.error("Save failed:", e);
+      alert("Save failed: " + (e?.message ?? e));
     } finally {
       setSaving(false);
     }
@@ -223,26 +238,20 @@ export default function AddOverlay({
 
         {/* ── Header ──────────────────────────────────────────────── */}
         <div className="apv2-header">
-          <div className="apv2-header-left">
-            <h2 className="apv2-title">{headerTitle}</h2>
-            {hasFiles && (
-              <div className="apv2-tabs">
-                <button
-                  className={`apv2-tab${mode === "image" ? " active" : ""}`}
-                  onClick={() => setMode("image")}
-                >Images</button>
-                <button
-                  className={`apv2-tab${mode === "flow" ? " active" : ""}`}
-                  onClick={() => setMode("flow")}
-                >Flow</button>
-              </div>
-            )}
-          </div>
-          {hasFiles && (
-            <span className="apv2-count">
-              {imageFiles.length} {imageFiles.length === 1 ? "image" : "images"}
-            </span>
-          )}
+          <h2 className="apv2-title">{headerTitle}</h2>
+          {hasFiles ? (
+            <div className="apv2-tabs">
+              <button
+                className={`apv2-tab${mode === "image" ? " active" : ""}`}
+                onClick={() => setMode("image")}
+              >Image</button>
+              <button
+                className={`apv2-tab${mode === "flow" ? " active" : ""}`}
+                onClick={() => setMode("flow")}
+              >Flow</button>
+            </div>
+          ) : <div />}
+          <button className="apv2-close-btn" onClick={onCancel} title="Close">×</button>
         </div>
 
         {/* ── Body ────────────────────────────────────────────────── */}
@@ -268,7 +277,7 @@ export default function AddOverlay({
                       title="Remove"
                     >×</button>
                   </div>
-                  <span className="apv2-single-name">{imageFiles[0].name}</span>
+                  <span className="apv2-single-name">{meta.title || imageFiles[0].name}</span>
                 </div>
               ) : mode === "image" ? (
                 <div className="apv2-list">
@@ -281,7 +290,7 @@ export default function AddOverlay({
                       <div className="apv2-list-thumb" style={{ background: thumbBg(i) }}>
                         {previewUrls[i] && <img src={previewUrls[i]} alt="" />}
                       </div>
-                      <span className="apv2-list-name">{f.name}</span>
+                      <span className="apv2-list-name">{imageMetas[i]?.title || f.name}</span>
                       <button
                         className="apv2-list-remove"
                         onClick={(e) => { e.stopPropagation(); onRemoveFile(i); }}
@@ -328,7 +337,7 @@ export default function AddOverlay({
                           >×</button>
                         </div>
                         {i < imageFiles.length - 1 && (
-                          <div className="apv2-flow-arrow">↓</div>
+                          <div className="apv2-flow-arrow">⌄</div>
                         )}
                       </div>
                     );
@@ -351,130 +360,142 @@ export default function AddOverlay({
                   <p className="apv2-section-label">
                     {imageFiles.length > 1
                       ? `Image ${selectedIdx + 1} of ${imageFiles.length}`
-                      : "Image details"}
+                      : "1 Image"}
                   </p>
 
-                  <div className="apv2-field">
-                    <label className="apv2-label">Title</label>
+                  <div className="apv2-title-group">
                     <input
-                      className="apv2-input"
+                      className="apv2-title-input"
+                      placeholder="Untitled"
                       value={meta.title}
                       onChange={(e) => updateMeta(selectedIdx, "title", e.target.value)}
                       autoFocus
                     />
+                    <textarea
+                      className="apv2-note-input"
+                      placeholder="add note"
+                      value={meta.note}
+                      onChange={(e) => updateMeta(selectedIdx, "note", e.target.value)}
+                      rows={2}
+                    />
                   </div>
 
-                  <div className="apv2-field">
-                    <label className="apv2-label">Tags</label>
-                    <div className="apv2-tag-box">
+                  <div>
+                    <span className="detail-meta-label">Tags</span>
+                    <div className="detail-pills-row" style={{ marginTop: 8 }}>
                       {meta.tags.map((t) => (
-                        <span key={t} className="apv2-tag-pill">
-                          {t}
-                          <button className="apv2-tag-remove" onClick={() => removeImageTag(selectedIdx, t)}>×</button>
-                        </span>
+                        <TagChip key={t} label={t} onRemove={() => removeImageTag(selectedIdx, t)} />
                       ))}
-                      <input
-                        className="apv2-tag-input"
-                        placeholder="add tag..."
-                        value={meta.tagInput}
-                        onChange={(e) => updateMeta(selectedIdx, "tagInput", e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); addImageTag(selectedIdx); }
+                      <button
+                        ref={tagBtnRef}
+                        className="detail-add-btn"
+                        onClick={() => {
+                          const rect = tagBtnRef.current?.getBoundingClientRect();
+                          if (rect) setTagPickerPos({ x: rect.left, y: rect.bottom + 4 });
                         }}
-                      />
+                      >
+                        <LucideIcons.Plus size={16} />
+                      </button>
                     </div>
                   </div>
 
-                  <div className="apv2-field">
-                    <label className="apv2-label">Collection</label>
-                    <select
-                      className="apv2-input apv2-select"
-                      value={meta.collectionId}
-                      onChange={(e) => updateMeta(selectedIdx, "collectionId", e.target.value)}
-                    >
-                      <option value="">None</option>
-                      {collections.map((c) => (
-                        <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="apv2-field">
-                    <label className="apv2-label">Note</label>
-                    <textarea
-                      className="apv2-input apv2-textarea"
-                      placeholder="Optional note..."
-                      value={meta.note}
-                      onChange={(e) => updateMeta(selectedIdx, "note", e.target.value)}
-                      rows={4}
-                    />
+                  <div>
+                    <span className="detail-meta-label">Collection</span>
+                    <div className="detail-pills-row" style={{ marginTop: 8 }}>
+                      {(meta.collectionIds ?? []).map((id) => {
+                        const col = collections.find((c) => c.id === id);
+                        if (!col) return null;
+                        return (
+                          <CollectionChip
+                            key={id}
+                            name={col.name}
+                            color={col.color}
+                            icon={col.icon}
+                            onRemove={() => updateMeta(selectedIdx, "collectionIds", (meta.collectionIds ?? []).filter((x) => x !== id))}
+                          />
+                        );
+                      })}
+                      <button
+                        ref={colBtnRef}
+                        className="detail-add-btn"
+                        onClick={() => {
+                          const rect = colBtnRef.current?.getBoundingClientRect();
+                          if (rect) setColPickerPos({ x: rect.left, y: rect.bottom + 4 });
+                        }}
+                      >
+                        <LucideIcons.Plus size={16} />
+                      </button>
+                    </div>
                   </div>
                 </>
               ) : (
                 <>
-                  <div className="apv2-field">
-                    <label className="apv2-label">Flow title</label>
+                  <p className="apv2-section-label">
+                    {imageFiles.length} Image Flow
+                  </p>
+
+                  <div className="apv2-title-group">
                     <input
-                      className="apv2-input"
-                      placeholder="e.g. Spotify onboarding"
+                      className="apv2-title-input"
+                      placeholder="Flow name"
                       value={flowTitle}
                       onChange={(e) => setFlowTitle(e.target.value)}
                       autoFocus
                     />
+                    <textarea
+                      className="apv2-note-input"
+                      placeholder="add note"
+                      rows={2}
+                    />
                   </div>
 
-                  <div className="apv2-field">
-                    <label className="apv2-label">Collection</label>
-                    <select
-                      className="apv2-input apv2-select"
-                      value={flowCollectionId}
-                      onChange={(e) => setFlowCollectionId(e.target.value)}
-                    >
-                      <option value="">None</option>
-                      {collections.map((c) => (
-                        <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="apv2-field">
-                    <label className="apv2-label">Tags</label>
-                    <div className="apv2-tag-box">
+                  <div>
+                    <span className="detail-meta-label">Tags</span>
+                    <div className="detail-pills-row" style={{ marginTop: 8 }}>
                       {flowTags.map((t) => (
-                        <span key={t} className="apv2-tag-pill">
-                          {t}
-                          <button
-                            className="apv2-tag-remove"
-                            onClick={() => setFlowTags((prev) => prev.filter((x) => x !== t))}
-                          >×</button>
-                        </span>
+                        <TagChip key={t} label={t} onRemove={() => setFlowTags((prev) => prev.filter((x) => x !== t))} />
                       ))}
-                      <input
-                        className="apv2-tag-input"
-                        placeholder="add tag..."
-                        value={flowTagInput}
-                        onChange={(e) => setFlowTagInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); addFlowTag(); }
+                      <button
+                        ref={tagBtnRef}
+                        className="detail-add-btn"
+                        onClick={() => {
+                          const rect = tagBtnRef.current?.getBoundingClientRect();
+                          if (rect) setTagPickerPos({ x: rect.left, y: rect.bottom + 4 });
                         }}
-                      />
+                      >
+                        <LucideIcons.Plus size={16} />
+                      </button>
                     </div>
                   </div>
 
-                  {flowScreenIdx !== null ? (
-                    <div className="apv2-field">
-                      <label className="apv2-label">Note for screen {flowScreenIdx + 1}</label>
-                      <textarea
-                        className="apv2-input apv2-textarea"
-                        placeholder="Optional note..."
-                        rows={3}
-                      />
+                  <div>
+                    <span className="detail-meta-label">Collection</span>
+                    <div className="detail-pills-row" style={{ marginTop: 8 }}>
+                      {flowCollectionIds.map((id) => {
+                        const col = collections.find((c) => c.id === id);
+                        if (!col) return null;
+                        return (
+                          <CollectionChip
+                            key={id}
+                            name={col.name}
+                            color={col.color}
+                            icon={col.icon}
+                            onRemove={() => setFlowCollectionIds((prev) => prev.filter((x) => x !== id))}
+                          />
+                        );
+                      })}
+                      <button
+                        ref={colBtnRef}
+                        className="detail-add-btn"
+                        onClick={() => {
+                          const rect = colBtnRef.current?.getBoundingClientRect();
+                          if (rect) setColPickerPos({ x: rect.left, y: rect.bottom + 4 });
+                        }}
+                      >
+                        <LucideIcons.Plus size={16} />
+                      </button>
                     </div>
-                  ) : (
-                    <p className="apv2-hint-text">
-                      Click a screen on the left to add an optional note to it.
-                    </p>
-                  )}
+                  </div>
                 </>
               )}
             </div>
@@ -483,23 +504,12 @@ export default function AddOverlay({
 
         {/* ── Footer ──────────────────────────────────────────────── */}
         <div className="apv2-footer">
-          <span className="apv2-footer-hint">
-            {!hasFiles
-              ? "Drag images here or click to browse"
-              : mode === "flow"
-                ? "Drag handles to reorder screens"
-                : imageFiles.length > 1
-                  ? "Click an image to edit details"
-                  : ""}
-          </span>
-          <div className="apv2-footer-actions">
-            <button className="btn-ghost" onClick={onCancel} disabled={saving}>Cancel</button>
-            {hasFiles && (
-              <button className="btn-primary" onClick={handleSave} disabled={saving}>
-                {saveLabel}
-              </button>
-            )}
-          </div>
+          <button className="btn-ghost" onClick={onCancel} disabled={saving}>Cancel</button>
+          {hasFiles && (
+            <button className="btn-primary" onClick={handleSave} disabled={saving}>
+              {saveLabel}
+            </button>
+          )}
         </div>
 
       </div>
@@ -537,6 +547,99 @@ export default function AddOverlay({
           e.target.value = "";
         }}
       />
+
+      {/* Tag picker portal */}
+      {tagPickerPos && createPortal(
+        <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          <ContextMenu
+            x={tagPickerPos.x}
+            y={tagPickerPos.y}
+            searchable
+            items={allTags.map((t) => {
+              const selectedTags = mode === "flow" ? flowTags : (meta.tags ?? []);
+              return {
+                icon: LucideIcons.Hash,
+                iconColor: "var(--accent)",
+                label: t,
+                checked: selectedTags.includes(t),
+                action: () => {
+                  if (mode === "flow") {
+                    setFlowTags((prev) =>
+                      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
+                    );
+                  } else {
+                    const cur = imageMetas[selectedIdx]?.tags ?? [];
+                    updateMeta(selectedIdx, "tags",
+                      cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]
+                    );
+                  }
+                },
+              };
+            })}
+            onAddNew={(name) => {
+              setTagPickerPos(null);
+              const t = name.trim().toLowerCase();
+              if (!t) return;
+              if (mode === "flow") {
+                setFlowTags((prev) => prev.includes(t) ? prev : [...prev, t]);
+              } else {
+                const cur = imageMetas[selectedIdx]?.tags ?? [];
+                if (!cur.includes(t)) updateMeta(selectedIdx, "tags", [...cur, t]);
+              }
+            }}
+            onClose={() => setTagPickerPos(null)}
+          />
+        </div>,
+        document.body
+      )}
+
+      {/* Collection picker portal */}
+      {colPickerPos && createPortal(
+        <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          <ContextMenu
+            x={colPickerPos.x}
+            y={colPickerPos.y}
+            searchable
+            items={collections
+              .filter((c) => !c.archived)
+              .map((c) => {
+                const selectedIds = mode === "flow" ? flowCollectionIds : (meta.collectionIds ?? []);
+                return {
+                  icon: LucideIcons[c.icon] ?? LucideIcons.Folder,
+                  iconColor: c.color || undefined,
+                  label: c.name,
+                  checked: selectedIds.includes(c.id),
+                  action: () => {
+                    if (mode === "flow") {
+                      setFlowCollectionIds((prev) =>
+                        prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id]
+                      );
+                    } else {
+                      updateMeta(selectedIdx, "collectionIds",
+                        selectedIds.includes(c.id)
+                          ? selectedIds.filter((x) => x !== c.id)
+                          : [...selectedIds, c.id]
+                      );
+                    }
+                  },
+                };
+              })}
+            onAddNew={async (name) => {
+              setColPickerPos(null);
+              const col = await onCreateCollection({ name, icon: "Folder" });
+              if (col?.id) {
+                if (mode === "flow") {
+                  setFlowCollectionIds((prev) => [...prev, col.id]);
+                } else {
+                  updateMeta(selectedIdx, "collectionIds", [...(meta.collectionIds ?? []), col.id]);
+                }
+              }
+            }}
+            onClose={() => setColPickerPos(null)}
+          />
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

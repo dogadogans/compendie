@@ -1,23 +1,21 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect, Fragment } from "react";
 import { createPortal } from "react-dom";
 import * as Icons from "lucide-react";
 import CreateCollectionModal from "./CreateCollectionModal";
 import ContextMenu from "./ContextMenu";
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragOverlay } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-function SortableCollectionRow({ col, disabled, nestingActive, children }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: col.id, disabled });
-  // Freeze non-dragged items in place while user is hovering to nest — prevents jumpiness
-  const frozenTransform = (nestingActive && !isDragging) ? undefined : CSS.Transform.toString(transform);
+function SortableCollectionRow({ col, activeDragId, children }) {
+  const { attributes, listeners, setNodeRef, isDragging } =
+    useSortable({ id: col.id });
+  const isDragActive = activeDragId !== null;
+  const style = isDragActive
+    ? { opacity: isDragging ? 0.3 : 1, transform: "none", transition: "none" }
+    : {};
   return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: frozenTransform, transition: nestingActive && !isDragging ? "none" : transition, opacity: isDragging ? 0.5 : 1 }}
-      {...(disabled ? {} : { ...attributes, ...listeners })}
-    >
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
       {children}
     </div>
   );
@@ -83,12 +81,23 @@ export default function Sidebar({
   );
   const [modalOpen, setModalOpen] = useState(false);
   const [tagMenu, setTagMenu] = useState(null); // { tag, x, y }
+  const [tagMenuMode, setTagMenuMode] = useState("main"); // "main" | "sort"
   const [renamingTag, setRenamingTag] = useState(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [tagSort, setTagSort] = useState({ by: "manual", dir: "asc" });
   const [newTagOpen, setNewTagOpen] = useState(false);
   const [newTagDraft, setNewTagDraft] = useState("");
-  const [nestHoverId, setNestHoverId] = useState(null); // folder highlighted for nesting
+  const [nestHighlightId, setNestHighlightId] = useState(null);
+  const [activeDragId, setActiveDragId] = useState(null);
+  const [activeTagDragId, setActiveTagDragId] = useState(null);
+  const [dropLineIndex, setDropLineIndex] = useState(null);
+  const pointerYRef = useRef(0);
+
+  useEffect(() => {
+    const track = (e) => { pointerYRef.current = e.clientY; };
+    window.addEventListener("pointermove", track);
+    return () => window.removeEventListener("pointermove", track);
+  }, []);
 
   const displayTags = (() => {
     const tags = sidebarTags || [];
@@ -110,6 +119,7 @@ export default function Sidebar({
     e.preventDefault();
     e.stopPropagation();
     setTagMenu({ tag, x: e.clientX, y: e.clientY });
+    setTagMenuMode("main");
   };
 
   const commitRename = (oldTag) => {
@@ -135,27 +145,54 @@ export default function Sidebar({
     setTagSort({ by: "manual", dir: "asc" });
   };
 
-  const handleCollectionDragMove = ({ delta, over, active }) => {
-    // Drag right ≥ 24px over a different item = nest mode, like Notion
-    if (delta.x >= 24 && over && over.id !== active.id) {
-      setNestHoverId(over.id);
+  const handleCollectionDragStart = ({ active }) => {
+    setActiveDragId(active.id);
+    setDropLineIndex(null);
+    setNestHighlightId(null);
+  };
+
+  const handleCollectionDragMove = ({ over, active }) => {
+    if (!over || over.id === active.id) {
+      setNestHighlightId(null);
+      setDropLineIndex(null);
+      return;
+    }
+    const overIndex = topLevel.findIndex((c) => c.id === over.id);
+    if (overIndex === -1) return;
+    // Divide the hovered item into 3 zones vertically.
+    // Top 25% → drop line above, bottom 25% → drop line below, middle 50% → nest inside.
+    const zone = (pointerYRef.current - over.rect.top) / over.rect.height;
+    if (zone < 0.25) {
+      setNestHighlightId(null);
+      setDropLineIndex(overIndex);
+    } else if (zone > 0.75) {
+      setNestHighlightId(null);
+      setDropLineIndex(overIndex + 1);
     } else {
-      setNestHoverId(null);
+      setNestHighlightId(over.id);
+      setDropLineIndex(null);
     }
   };
 
-  const handleCollectionDragEnd = ({ active, over }) => {
-    const wasNesting = nestHoverId && nestHoverId !== active.id;
-    setNestHoverId(null);
+  const handleCollectionDragEnd = ({ active }) => {
+    const wasNesting = nestHighlightId && nestHighlightId !== active.id;
+    const lineIdx = dropLineIndex;
+    const nestTarget = nestHighlightId;
+    setNestHighlightId(null);
+    setDropLineIndex(null);
+    setActiveDragId(null);
     if (wasNesting) {
-      onNestCollection(active.id, nestHoverId);
+      onNestCollection(active.id, nestTarget);
       return;
     }
-    if (!over || active.id === over.id) return;
-    const oldIndex = topLevel.findIndex((c) => c.id === active.id);
-    const newIndex = topLevel.findIndex((c) => c.id === over.id);
+    if (lineIdx === null) return;
+    const activeIndex = topLevel.findIndex((c) => c.id === active.id);
+    if (activeIndex === -1) return;
+    let newIndex = lineIdx;
+    if (activeIndex < newIndex) newIndex--;
+    if (newIndex === activeIndex || newIndex < 0) return;
     if (!isManual) onSortChange?.({ by: "manual", dir: "asc" });
-    onReorderCollections(arrayMove(topLevel, oldIndex, newIndex).map((c) => c.id));
+    onReorderCollections(arrayMove(topLevel, activeIndex, newIndex).map((c) => c.id));
   };
 
   const topLevel = useMemo(() => {
@@ -223,7 +260,7 @@ export default function Sidebar({
       <div key={col.id} className="collection-row-wrap">
         <div
           data-collection-id={col.id}
-          className={`nav-item collection-item${isActive ? " active" : ""}${isChild ? " sub-item" : ""}${nestHoverId === col.id ? " nest-target" : ""}`}
+          className={`nav-item collection-item${isActive ? " active" : ""}${isChild ? " sub-item" : ""}${nestHighlightId === col.id ? " nest-target" : ""}`}
           onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, col); }}
         >
           {isChild ? (
@@ -336,21 +373,45 @@ export default function Sidebar({
           </div>
 
           {!foldersCollapsed && (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragMove={handleCollectionDragMove} onDragEnd={handleCollectionDragEnd}>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleCollectionDragStart} onDragMove={handleCollectionDragMove} onDragEnd={handleCollectionDragEnd}>
               <SortableContext items={topLevel.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-                {topLevel.map((col) => (
-                  <SortableCollectionRow key={col.id} col={col} nestingActive={!!nestHoverId}>
-                    {renderCollection(col)}
-                  </SortableCollectionRow>
+                {topLevel.map((col, i) => (
+                  <Fragment key={col.id}>
+                    {activeDragId && dropLineIndex === i && (
+                      <div className="collection-drop-line" />
+                    )}
+                    <SortableCollectionRow col={col} activeDragId={activeDragId}>
+                      {renderCollection(col)}
+                    </SortableCollectionRow>
+                  </Fragment>
                 ))}
+                {activeDragId && dropLineIndex === topLevel.length && (
+                  <div className="collection-drop-line" />
+                )}
               </SortableContext>
+              <DragOverlay dropAnimation={null}>
+                {activeDragId && (() => {
+                  const col = topLevel.find((c) => c.id === activeDragId);
+                  if (!col) return null;
+                  return (
+                    <div className="nav-item collection-item collection-drag-ghost">
+                      <span className="col-icon-wrap">
+                        <ColIcon icon={col.icon} color={col.color} size={16} />
+                      </span>
+                      <span className="collection-label">
+                        <span className="collection-name">{col.name}</span>
+                      </span>
+                    </div>
+                  );
+                })()}
+              </DragOverlay>
             </DndContext>
           )}
         </div>
 
         {/* Tags section */}
         {(displayTags.length > 0 || newTagOpen) && (
-          <div className="sidebar-section">
+          <div className={`sidebar-section${activeTagDragId ? " tags-sorting" : ""}`}>
             <div className="sidebar-section-header-row" onClick={toggleTags}>
               <span className="sidebar-section-label">Tags</span>
               <div className="sidebar-section-actions">
@@ -395,7 +456,7 @@ export default function Sidebar({
                 )}
 
                 {/* Draggable tag list */}
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTagDragEnd}>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={({ active }) => setActiveTagDragId(active.id)} onDragEnd={(e) => { setActiveTagDragId(null); handleTagDragEnd(e); }} onDragCancel={() => setActiveTagDragId(null)}>
                   <SortableContext items={displayTags} strategy={verticalListSortingStrategy}>
                     {displayTags.map((tag) => {
                       const count = items.filter((i) => i.tags.includes(tag)).length;
@@ -486,26 +547,20 @@ export default function Sidebar({
         <ContextMenu
           x={tagMenu.x}
           y={tagMenu.y}
-          items={[
-            {
-              icon: Icons.Pencil,
-              label: "Rename",
-              action: () => { setRenamingTag(tagMenu.tag); setRenameDraft(tagMenu.tag); setTagMenu(null); },
-            },
-            {
-              icon: Icons.Trash2,
-              label: "Delete",
-              danger: true,
-              action: () => { onDeleteTag(tagMenu.tag); setTagMenu(null); },
-            },
+          items={tagMenuMode === "sort" ? [
+            { icon: Icons.GripVertical, label: "Manual",    checked: tagSort.by === "manual",                          action: () => { setTagSort({ by: "manual", dir: "asc"  }); setTagMenu(null); } },
             "---",
             { icon: Icons.ArrowDownAZ,  label: "Name A→Z",  checked: tagSort.by === "name"  && tagSort.dir === "asc",  action: () => { setTagSort({ by: "name",  dir: "asc"  }); setTagMenu(null); } },
             { icon: Icons.ArrowUpAZ,    label: "Name Z→A",  checked: tagSort.by === "name"  && tagSort.dir === "desc", action: () => { setTagSort({ by: "name",  dir: "desc" }); setTagMenu(null); } },
             { icon: Icons.ArrowDown01,  label: "Count ↑",   checked: tagSort.by === "count" && tagSort.dir === "asc",  action: () => { setTagSort({ by: "count", dir: "asc"  }); setTagMenu(null); } },
             { icon: Icons.ArrowDown10,  label: "Count ↓",   checked: tagSort.by === "count" && tagSort.dir === "desc", action: () => { setTagSort({ by: "count", dir: "desc" }); setTagMenu(null); } },
-            { icon: Icons.GripVertical, label: "Manual",    checked: tagSort.by === "manual",                          action: () => { setTagSort({ by: "manual", dir: "asc" }); setTagMenu(null); } },
+          ] : [
+            { icon: Icons.Pencil,       label: "Rename",    action: () => { setRenamingTag(tagMenu.tag); setRenameDraft(tagMenu.tag); setTagMenu(null); } },
+            { icon: Icons.Trash2,       label: "Delete",    danger: true, action: () => { onDeleteTag(tagMenu.tag); setTagMenu(null); } },
+            "---",
+            { icon: Icons.ArrowUpDown,  label: "Sort by",   submenu: true, keepOpen: true, action: () => setTagMenuMode("sort") },
           ]}
-          onClose={() => setTagMenu(null)}
+          onClose={() => { setTagMenu(null); setTagMenuMode("main"); }}
         />,
         document.body
       )}

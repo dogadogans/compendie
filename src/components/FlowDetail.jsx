@@ -5,6 +5,8 @@ import { TagInputBox } from "./ui/TagInputBox";
 import { CollectionChip } from "./ui/CollectionChip";
 import ContextMenu from "./ContextMenu";
 
+const CARD_GAP = 16;
+
 export default function FlowDetail({
   flow,
   allItems,
@@ -32,7 +34,8 @@ export default function FlowDetail({
 
   const areaRef         = useRef(null);
   const selectedIdxRef  = useRef(selectedIdx);
-  const [cardWidth,  setCardWidth]  = useState(0);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [cardWidth,      setCardWidth]      = useState(0);
   const [dragDelta,  setDragDelta]  = useState(0);
   const [isSnapping, setIsSnapping] = useState(true);
 
@@ -140,7 +143,9 @@ export default function FlowDetail({
   useEffect(() => {
     if (!areaRef.current) return;
     const ro = new ResizeObserver(([entry]) => {
-      setCardWidth(entry.contentRect.width - 160);
+      const w = entry.contentRect.width;
+      setContainerWidth(w);
+      setCardWidth(Math.min(w * 0.46, 320));
     });
     ro.observe(areaRef.current);
     return () => ro.disconnect();
@@ -208,7 +213,7 @@ export default function FlowDetail({
   ];
 
   return (
-    <div className="detail-backdrop" onClick={onClose}>
+    <>
       <div className="detail-modal" onClick={(e) => e.stopPropagation()}>
 
         {/* ── Topbar ── */}
@@ -292,13 +297,13 @@ export default function FlowDetail({
                 <span className="flow-carousel-screen-counter">{selectedIdx + 1} / {screens.length}</span>
               </>
             )}
-            {cardWidth > 0 && (
+            {containerWidth > 0 && (
               <div
                 className="flow-carousel-track"
                 style={{
-                  transform:  `translateX(${80 - selectedIdx * cardWidth + dragDelta}px)`,
+                  transform:  `translateX(${Math.round(containerWidth / 2 - cardWidth / 2 - selectedIdx * (cardWidth + CARD_GAP)) + dragDelta}px)`,
                   transition: isSnapping ? "transform 200ms ease-out" : "none",
-                  width: cardWidth * screens.length,
+                  gap: CARD_GAP,
                 }}
               >
                 {screens.map((screen, idx) => (
@@ -427,6 +432,6 @@ export default function FlowDetail({
         </div>,
         document.body
       )}
-    </div>
+    </>
   );
 }

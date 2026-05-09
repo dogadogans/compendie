@@ -216,7 +216,7 @@ export default function DetailPanel({
   const zoomStepIndex = ZOOM_STEPS.indexOf(zoom) !== -1 ? ZOOM_STEPS.indexOf(zoom) : 2;
 
   return (
-    <div className="detail-backdrop" onClick={onClose}>
+    <>
       <div className="detail-modal" onClick={(e) => e.stopPropagation()}>
 
         {/* ── Top bar ── */}
@@ -414,6 +414,6 @@ export default function DetailPanel({
         </div>,
         document.body
       )}
-    </div>
+    </>
   );
 }
