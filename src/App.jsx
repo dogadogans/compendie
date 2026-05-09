@@ -768,7 +768,10 @@ export default function App() {
               });
             }}
             onClose={() => setSelectedItem(null)}
-            onNavigate={setSelectedItem}
+            onNavigate={(item) => {
+              if (item.type === "flow") { setSelectedItem(null); setFlowDetail(item); }
+              else setSelectedItem(item);
+            }}
             onCreateCollection={(data) => handleAddCollection({ ...data, parentId: null })}
             onAddNewCollection={(name) => setCollectionPickerModal({ prefillName: name, itemId: selectedItem.id })}
           />
@@ -932,6 +935,7 @@ export default function App() {
       {flowDetail && !flowBuilder && (
         <FlowDetail
           flow={flowDetail}
+          allItems={filtered}
           imageUrls={imageUrls}
           collections={collections}
           allTags={allTags}
@@ -948,6 +952,10 @@ export default function App() {
             });
           }}
           onClose={() => setFlowDetail(null)}
+          onNavigate={(item) => {
+            if (item.type === "flow") setFlowDetail(item);
+            else { setFlowDetail(null); setSelectedItem(item); }
+          }}
           onAddNewCollection={(name) => setCollectionPickerModal({ prefillName: name, itemId: flowDetail.id })}
         />
       )}

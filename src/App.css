@@ -475,6 +475,8 @@ html, body, #root { height: 100%; overflow: hidden; }
   position: relative;
   display: flex;
   align-items: center;
+  width: 240px;
+  flex-shrink: 0;
 }
 
 .search-input {
@@ -2130,6 +2132,44 @@ html, body, #root { height: 100%; overflow: hidden; }
   height: 200px;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 6px;
+}
+
+.flow-carousel-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  background: rgba(0, 0, 0, 0.32);
+  border: none;
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.9);
+  opacity: 0;
+  transition: opacity 140ms ease;
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+.flow-carousel-area:hover .flow-carousel-nav:not(:disabled) {
+  opacity: 1;
+}
+.flow-carousel-nav--left  { left: 12px; }
+.flow-carousel-nav--right { right: 12px; }
+
+.flow-carousel-screen-counter {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+  z-index: 2;
+  letter-spacing: 0.02em;
 }
 
 /* ── FlowDetail zoom controls ────────────────────────────────────────────── */
@@ -3971,6 +4011,15 @@ textarea.ui-input { min-height: 80px; line-height: 1.5; }
 [data-theme="light"] .detail-zoom-slider { background: var(--grey-300); }
 [data-theme="light"] .detail-zoom-slider::-webkit-slider-thumb { background: var(--grey-600); }
 [data-theme="light"] .detail-zoom-slider:hover::-webkit-slider-thumb { background: var(--grey-800); }
+
+/* Flow carousel nav — light mode */
+[data-theme="light"] .flow-carousel-nav {
+  background: rgba(0, 0, 0, 0.15);
+  color: rgba(0, 0, 0, 0.7);
+}
+[data-theme="light"] .flow-carousel-screen-counter {
+  color: rgba(0, 0, 0, 0.35);
+}
 
 /* Flow detail view */
 [data-theme="light"] .flow-detail { background: var(--grey-50); color: var(--text); }

@@ -7,15 +7,21 @@ import ContextMenu from "./ContextMenu";
 
 export default function FlowDetail({
   flow,
+  allItems,
   imageUrls,
   collections,
   allTags = [],
   onUpdate,
   onDelete,
   onClose,
+  onNavigate,
   onAddNewCollection,
 }) {
   const screens = flow.screens ?? [];
+
+  const allCurrentIndex = allItems.findIndex((i) => i.id === flow.id);
+  const hasPrevItem = allCurrentIndex > 0;
+  const hasNextItem = allCurrentIndex < allItems.length - 1;
 
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [metaHidden, setMetaHidden]   = useState(false);
@@ -210,23 +216,23 @@ export default function FlowDetail({
           <div className="detail-topbar-nav">
             <button
               className="btn-icon"
-              onClick={() => hasPrev && goTo(selectedIdx - 1)}
-              disabled={!hasPrev}
-              title="Previous screen (←)"
+              onClick={() => hasPrevItem && onNavigate(allItems[allCurrentIndex - 1])}
+              disabled={!hasPrevItem}
+              title="Previous (←)"
             >
               <LucideIcons.ChevronLeft size={15} />
             </button>
             <button
               className="btn-icon"
-              onClick={() => hasNext && goTo(selectedIdx + 1)}
-              disabled={!hasNext}
-              title="Next screen (→)"
+              onClick={() => hasNextItem && onNavigate(allItems[allCurrentIndex + 1])}
+              disabled={!hasNextItem}
+              title="Next (→)"
             >
               <LucideIcons.ChevronRight size={15} />
             </button>
-            {screens.length > 1 && (
+            {allItems.length > 1 && (
               <span className="detail-topbar-counter">
-                {selectedIdx + 1} / {screens.length}
+                {allCurrentIndex + 1} / {allItems.length}
               </span>
             )}
           </div>
@@ -265,6 +271,27 @@ export default function FlowDetail({
             style={{ cursor: "grab" }}
             onMouseDown={handleCarouselMouseDown}
           >
+            {screens.length > 1 && (
+              <>
+                <button
+                  className="flow-carousel-nav flow-carousel-nav--left"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); goTo(selectedIdx - 1); }}
+                  disabled={!hasPrev}
+                >
+                  <LucideIcons.ChevronLeft size={16} />
+                </button>
+                <button
+                  className="flow-carousel-nav flow-carousel-nav--right"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); goTo(selectedIdx + 1); }}
+                  disabled={!hasNext}
+                >
+                  <LucideIcons.ChevronRight size={16} />
+                </button>
+                <span className="flow-carousel-screen-counter">{selectedIdx + 1} / {screens.length}</span>
+              </>
+            )}
             {cardWidth > 0 && (
               <div
                 className="flow-carousel-track"

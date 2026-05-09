@@ -46,10 +46,9 @@ export default function DetailPanel({
     el.style.height = el.scrollHeight + "px";
   };
 
-  const imageItems   = allItems.filter((i) => i.type !== "flow");
-  const currentIndex = imageItems.findIndex((i) => i.id === item.id);
+  const currentIndex = allItems.findIndex((i) => i.id === item.id);
   const hasPrev      = currentIndex > 0;
-  const hasNext      = currentIndex < imageItems.length - 1;
+  const hasNext      = currentIndex < allItems.length - 1;
   const imageUrl     = imageUrls[item.id];
 
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
@@ -96,12 +95,12 @@ export default function DetailPanel({
       if (e.key === "Escape") { onClose(); return; }
       const tag = document.activeElement?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
-      if (e.key === "ArrowLeft"  && hasPrev) onNavigate(imageItems[currentIndex - 1]);
-      if (e.key === "ArrowRight" && hasNext) onNavigate(imageItems[currentIndex + 1]);
+      if (e.key === "ArrowLeft"  && hasPrev) onNavigate(allItems[currentIndex - 1]);
+      if (e.key === "ArrowRight" && hasNext) onNavigate(allItems[currentIndex + 1]);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose, onNavigate, hasPrev, hasNext, currentIndex, imageItems]);
+  }, [onClose, onNavigate, hasPrev, hasNext, currentIndex, allItems]);
 
   const handleImgAreaMouseDown = (e) => {
     if (zoom <= 1) return;
@@ -225,7 +224,7 @@ export default function DetailPanel({
           <div className="detail-topbar-nav">
             <button
               className="btn-icon"
-              onClick={() => hasPrev && onNavigate(imageItems[currentIndex - 1])}
+              onClick={() => hasPrev && onNavigate(allItems[currentIndex - 1])}
               disabled={!hasPrev}
               title="Previous (←)"
             >
@@ -233,14 +232,14 @@ export default function DetailPanel({
             </button>
             <button
               className="btn-icon"
-              onClick={() => hasNext && onNavigate(imageItems[currentIndex + 1])}
+              onClick={() => hasNext && onNavigate(allItems[currentIndex + 1])}
               disabled={!hasNext}
               title="Next (→)"
             >
               <LucideIcons.ChevronRight size={15} />
             </button>
-            {imageItems.length > 1 && (
-              <span className="detail-topbar-counter">{currentIndex + 1} / {imageItems.length}</span>
+            {allItems.length > 1 && (
+              <span className="detail-topbar-counter">{currentIndex + 1} / {allItems.length}</span>
             )}
           </div>
 
