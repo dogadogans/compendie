@@ -24,6 +24,12 @@ export default function FlowDetail({
   );
   const [dotMenuPos, setDotMenuPos]   = useState(null);
 
+  const areaRef         = useRef(null);
+  const selectedIdxRef  = useRef(selectedIdx);
+  const [cardWidth,  setCardWidth]  = useState(0);
+  const [dragDelta,  setDragDelta]  = useState(0);
+  const [isSnapping, setIsSnapping] = useState(true);
+
   const dotBtnRef = useRef(null);
 
   const hasPrev = selectedIdx > 0;
@@ -51,6 +57,43 @@ export default function FlowDetail({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose, hasPrev, hasNext, selectedIdx, goTo]);
+
+  useEffect(() => { selectedIdxRef.current = selectedIdx; }, [selectedIdx]);
+
+  useEffect(() => {
+    if (!areaRef.current) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setCardWidth(entry.contentRect.width - 160);
+    });
+    ro.observe(areaRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  const handleCarouselMouseDown = useCallback((e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    let delta = 0;
+
+    const onMove = (ev) => {
+      delta = ev.clientX - startX;
+      setDragDelta(delta);
+      setIsSnapping(false);
+    };
+
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup",   onUp);
+      const idx = selectedIdxRef.current;
+      const len = screens.length;
+      if (delta < -60 && idx < len - 1) goTo(idx + 1);
+      else if (delta > 60 && idx > 0)   goTo(idx - 1);
+      setDragDelta(0);
+      setIsSnapping(true);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup",   onUp);
+  }, [screens.length, goTo]);
 
   const openDotMenu = () => {
     const rect = dotBtnRef.current?.getBoundingClientRect();
@@ -144,21 +187,36 @@ export default function FlowDetail({
         {/* ── Body ── */}
         <div className="detail-body">
 
-          {/* Carousel area — static placeholder, wired up in Task 3 */}
-          <div className="flow-carousel-area">
-            {screens[selectedIdx] && imageUrls[screens[selectedIdx].id]
-              ? <img
-                  src={imageUrls[screens[selectedIdx].id]}
-                  alt={`Screen ${selectedIdx + 1}`}
-                  style={{
-                    maxHeight: "calc(100% - 32px)",
-                    maxWidth: "calc(100% - 160px)",
-                    objectFit: "contain",
-                    borderRadius: 6,
-                  }}
-                />
-              : <div className="flow-carousel-placeholder" />
-            }
+          {/* Carousel */}
+          <div
+            ref={areaRef}
+            className="flow-carousel-area"
+            style={{ cursor: "grab" }}
+            onMouseDown={handleCarouselMouseDown}
+          >
+            {cardWidth > 0 && (
+              <div
+                className="flow-carousel-track"
+                style={{
+                  transform:  `translateX(${80 - selectedIdx * cardWidth + dragDelta}px)`,
+                  transition: isSnapping ? "transform 200ms ease-out" : "none",
+                  width: cardWidth * screens.length,
+                }}
+              >
+                {screens.map((screen, idx) => (
+                  <div
+                    key={screen.id}
+                    className={`flow-carousel-card${idx !== selectedIdx ? " flow-carousel-card--adjacent" : ""}`}
+                    style={{ width: cardWidth }}
+                  >
+                    {imageUrls[screen.id]
+                      ? <img src={imageUrls[screen.id]} alt={`Screen ${idx + 1}`} />
+                      : <div className="flow-carousel-placeholder" />
+                    }
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Metadata panel — placeholder, filled in Task 4 */}
