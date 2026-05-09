@@ -121,7 +121,7 @@ export default function FlowDetail({
     const handler = (e) => {
       if (e.key === "Escape") { onClose(); return; }
       const tag = document.activeElement?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (tag === "INPUT" || tag === "TEXTAREA" || document.activeElement?.isContentEditable) return;
       if (e.key === "ArrowLeft"  && hasPrev) goTo(selectedIdx - 1);
       if (e.key === "ArrowRight" && hasNext) goTo(selectedIdx + 1);
     };
@@ -197,7 +197,7 @@ export default function FlowDetail({
       icon: LucideIcons.Trash2,
       label: "Delete",
       danger: true,
-      action: () => { onDelete(flow.id); onClose(); },
+      action: () => onDelete(flow.id),
     },
   ];
 

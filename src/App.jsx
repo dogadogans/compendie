@@ -935,13 +935,16 @@ export default function App() {
           imageUrls={imageUrls}
           collections={collections}
           allTags={allTags}
-          onUpdate={handleUpdate}
+          onUpdate={(id, patch) => {
+            handleUpdate(id, patch);
+            setFlowDetail((prev) => (prev?.id === id ? { ...prev, ...patch } : prev));
+          }}
           onDelete={(id) => {
             setAlertDialog({
               title: "Delete this flow?",
               message: "This will permanently remove the flow and all its screens from Tome.",
               confirmLabel: "Delete",
-              onConfirm: () => { setAlertDialog(null); handleDelete(id); },
+              onConfirm: () => { setAlertDialog(null); handleDelete(id); setFlowDetail(null); },
             });
           }}
           onClose={() => setFlowDetail(null)}
