@@ -317,17 +317,6 @@ export default function App() {
     setFlowBuilder(null);
   };
 
-  const handleUpdateScreenNote = async (flowId, screenId, note) => {
-    const flow = items.find((i) => i.id === flowId);
-    if (!flow) return;
-    const updatedScreens = flow.screens.map((s) =>
-      s.id === screenId ? { ...s, note } : s
-    );
-    const updated = await updateFlow(flowId, { screens: updatedScreens });
-    setItems((prev) => prev.map((i) => (i.id === flowId ? updated : i)));
-    setFlowDetail(updated);
-  };
-
   const handleDelete = async (id) => {
     await deleteItem(id);
     setItems((prev) => prev.filter((i) => i.id !== id));
