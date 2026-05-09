@@ -18,7 +18,7 @@ import DetailPanel from "./components/DetailPanel";
 import FlowBuilder from "./components/FlowBuilder";
 import FlowDetail from "./components/FlowDetail";
 import CreateCollectionModal from "./components/CreateCollectionModal";
-import DeleteConfirmModal from "./components/DeleteConfirmModal";
+import AlertDialog from "./components/AlertDialog";
 import ActionsDropdown  from "./components/ActionsDropdown";
 import CollectionPicker from "./components/CollectionPicker";
 import QuickFolderModal from "./components/QuickFolderModal";
@@ -65,12 +65,11 @@ export default function App() {
   const [ctxMenu,      setCtxMenu]      = useState(null);
   const [editingCollection, setEditingCollection] = useState(null);
   const [newFolderParentId, setNewFolderParentId] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, name }
+  const [alertDialog, setAlertDialog] = useState(null); // { title, message, confirmLabel, onConfirm }
   const [selectedIds,       setSelectedIds]       = useState(new Set());
   const [organizeMode,      setOrganizeMode]       = useState(false);
   const [actionMenuOpen,    setActionMenuOpen]     = useState(false);
   const [pickerMode,        setPickerMode]         = useState(null); // "move" | "copy" | null
-  const [bulkDeleteConfirm, setBulkDeleteConfirm]  = useState(false);
   const [quickFolderOpen,   setQuickFolderOpen]    = useState(false);
   const [collectionPickerModal, setCollectionPickerModal] = useState(null); // { prefillName, itemId }
   const [collectionSort, setCollectionSort] = useState(() => {
@@ -269,12 +268,20 @@ export default function App() {
       setActiveView({ type: "tag", tag: newTag });
   };
 
-  const handleDeleteTag = async (tag) => {
-    const { items: updatedItems, globalTags: updatedGlobalTags } = await bulkDeleteTag(tag);
-    setItems(updatedItems);
-    setGlobalTags(updatedGlobalTags);
-    if (activeView.type === "tag" && activeView.tag === tag)
-      setActiveView({ type: "all" });
+  const handleDeleteTag = (tag) => {
+    setAlertDialog({
+      title: `Delete "#${tag}"`,
+      message: "This will remove the tag from all images and flows.",
+      confirmLabel: "Delete tag",
+      onConfirm: async () => {
+        setAlertDialog(null);
+        const { items: updatedItems, globalTags: updatedGlobalTags } = await bulkDeleteTag(tag);
+        setItems(updatedItems);
+        setGlobalTags(updatedGlobalTags);
+        if (activeView.type === "tag" && activeView.tag === tag)
+          setActiveView({ type: "all" });
+      },
+    });
   };
 
   const handleAddTag = async (tag) => {
@@ -435,22 +442,23 @@ export default function App() {
 
   const handleDeleteCollection = (id) => {
     const col = collections.find((c) => c.id === id);
-    setDeleteConfirm({ id, name: col?.name ?? "" });
-  };
-
-  const confirmDeleteCollection = async () => {
-    if (!deleteConfirm) return;
-    const { id } = deleteConfirm;
-    setDeleteConfirm(null);
-    await deleteCollection(id);
-    const removedIds = new Set([id, ...collections.filter((c) => c.parent_id === id).map((c) => c.id)]);
-    setCollections((prev) => prev.filter((c) => !removedIds.has(c.id)));
-    setItems((prev) => prev.map((i) => ({
-      ...i,
-      collections: i.collections.filter((cid) => !removedIds.has(cid)),
-    })));
-    if (activeView.type === "collection" && activeView.id === id)
-      setActiveView({ type: "all" });
+    setAlertDialog({
+      title: `Delete "${col?.name ?? ""}"`,
+      message: "Your images won't be deleted — they'll stay in All and any other collections they belong to.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        setAlertDialog(null);
+        await deleteCollection(id);
+        const removedIds = new Set([id, ...collections.filter((c) => c.parent_id === id).map((c) => c.id)]);
+        setCollections((prev) => prev.filter((c) => !removedIds.has(c.id)));
+        setItems((prev) => prev.map((i) => ({
+          ...i,
+          collections: i.collections.filter((cid) => !removedIds.has(cid)),
+        })));
+        if (activeView.type === "collection" && activeView.id === id)
+          setActiveView({ type: "all" });
+      },
+    });
   };
 
   const handleSortChange = (newSort) => {
@@ -585,7 +593,17 @@ export default function App() {
           }),
       }] : []),
       "---",
-      { icon: Trash2, label: "Delete", danger: true, action: () => handleDelete(item.id) },
+      { icon: Trash2, label: "Delete", danger: true, action: () => {
+        const isFlow = item.type === "flow";
+        setAlertDialog({
+          title: isFlow ? "Delete this flow?" : "Delete this image?",
+          message: isFlow
+            ? "This will permanently remove the flow and all its screens from Tome."
+            : "This will permanently remove the image from Tome.",
+          confirmLabel: "Delete",
+          onConfirm: () => { setAlertDialog(null); handleDelete(item.id); },
+        });
+      }},
     ]);
   };
 
@@ -749,7 +767,17 @@ export default function App() {
             collections={collections}
             allTags={allTags}
             onUpdate={handleUpdate}
-            onDelete={handleDelete}
+            onDelete={(id) => {
+              const it = itemsRef.current.find((i) => i.id === id);
+              setAlertDialog({
+                title: it?.type === "flow" ? "Delete this flow?" : "Delete this image?",
+                message: it?.type === "flow"
+                  ? "This will permanently remove the flow and all its screens from Tome."
+                  : "This will permanently remove the image from Tome.",
+                confirmLabel: "Delete",
+                onConfirm: () => { setAlertDialog(null); handleDelete(id); },
+              });
+            }}
             onClose={() => setSelectedItem(null)}
             onNavigate={setSelectedItem}
             onCreateCollection={(data) => handleAddCollection({ ...data, parentId: null })}
@@ -784,7 +812,16 @@ export default function App() {
                     onMoveTo={() => { setActionMenuOpen(false); setPickerMode("move"); }}
                     onCopyTo={() => { setActionMenuOpen(false); setPickerMode("copy"); }}
                     onNewFolder={() => { setActionMenuOpen(false); setQuickFolderOpen(true); }}
-                    onDelete={() => { setActionMenuOpen(false); setBulkDeleteConfirm(true); }}
+                    onDelete={() => {
+                      setActionMenuOpen(false);
+                      const n = selectedIds.size;
+                      setAlertDialog({
+                        title: `Delete ${n} ${n === 1 ? "item" : "items"}?`,
+                        message: "This cannot be undone. Deleted items are removed from Tome permanently.",
+                        confirmLabel: `Delete ${n === 1 ? "item" : `${n} items`}`,
+                        onConfirm: async () => { setAlertDialog(null); await handleBulkDelete(); },
+                      });
+                    }}
                     onClose={handleCloseActionMenu}
                   />
                 )}
@@ -856,21 +893,13 @@ export default function App() {
 
       <Toaster />
 
-      {deleteConfirm && (
-        <DeleteConfirmModal
-          collectionName={deleteConfirm.name}
-          onConfirm={confirmDeleteCollection}
-          onClose={() => setDeleteConfirm(null)}
-        />
-      )}
-
-      {bulkDeleteConfirm && (
-        <DeleteConfirmModal
-          title={`Delete ${selectedIds.size} ${selectedIds.size === 1 ? "item" : "items"}?`}
-          message="This cannot be undone. Deleted items are removed from Tome permanently."
-          confirmLabel={`Delete ${selectedIds.size === 1 ? "item" : `${selectedIds.size} items`}`}
-          onConfirm={async () => { setBulkDeleteConfirm(false); await handleBulkDelete(); }}
-          onClose={() => setBulkDeleteConfirm(false)}
+      {alertDialog && (
+        <AlertDialog
+          title={alertDialog.title}
+          message={alertDialog.message}
+          confirmLabel={alertDialog.confirmLabel}
+          onConfirm={alertDialog.onConfirm}
+          onClose={() => setAlertDialog(null)}
         />
       )}
 
@@ -915,9 +944,19 @@ export default function App() {
         <FlowDetail
           flow={flowDetail}
           imageUrls={imageUrls}
+          collections={collections}
+          allTags={allTags}
+          onUpdate={handleUpdate}
+          onDelete={(id) => {
+            setAlertDialog({
+              title: "Delete this flow?",
+              message: "This will permanently remove the flow and all its screens from Tome.",
+              confirmLabel: "Delete",
+              onConfirm: () => { setAlertDialog(null); handleDelete(id); },
+            });
+          }}
           onClose={() => setFlowDetail(null)}
-          onEdit={() => setFlowBuilder({ mode: "edit", flow: flowDetail })}
-          onUpdateScreenNote={handleUpdateScreenNote}
+          onAddNewCollection={(name) => setCollectionPickerModal({ prefillName: name, itemId: flowDetail.id })}
         />
       )}
 
