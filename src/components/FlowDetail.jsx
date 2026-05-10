@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import * as LucideIcons from "lucide-react";
-import { TagInputBox } from "./ui/TagInputBox";
+import { TagChip } from "./ui/TagChip";
 import { CollectionChip } from "./ui/CollectionChip";
 import ContextMenu from "./ContextMenu";
 
-const CARD_GAP = 16;
+const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
 
 export default function FlowDetail({
   flow,
@@ -25,28 +25,30 @@ export default function FlowDetail({
   const hasPrevItem = allCurrentIndex > 0;
   const hasNextItem = allCurrentIndex < allItems.length - 1;
 
-  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [scrollOffset, setScrollOffset] = useState(0);
   const [metaHidden, setMetaHidden]   = useState(false);
   const [metaWidth,  setMetaWidth]    = useState(
     () => parseInt(localStorage.getItem("tome_flow_detail_meta_width") || "320")
   );
+  const [zoom,       setZoom]         = useState(1);
   const [dotMenuPos, setDotMenuPos]   = useState(null);
-
-  const areaRef         = useRef(null);
-  const selectedIdxRef  = useRef(selectedIdx);
   const [containerWidth, setContainerWidth] = useState(0);
-  const [cardWidth,      setCardWidth]      = useState(0);
-  const [dragDelta,  setDragDelta]  = useState(0);
-  const [isSnapping, setIsSnapping] = useState(true);
+  const [isDragging, setIsDragging] = useState(false);
+  const areaRef = useRef(null);
+  const scrollOffsetRef = useRef(0);
+  const prevItemWidthRef = useRef(0);
+  const zoomRef = useRef(zoom);
 
   const [title,       setTitle]       = useState(flow.title);
   const [tags,        setTags]        = useState(flow.tags  ?? []);
   const [note,        setNote]        = useState(flow.note  ?? "");
   const [colPickerPos, setColPickerPos] = useState(null);
+  const [tagPickerPos, setTagPickerPos] = useState(null);
 
   const titleRef  = useRef(null);
   const noteRef   = useRef(null);
   const colBtnRef = useRef(null);
+  const tagBtnRef = useRef(null);
 
   const autoResize = (el) => {
     if (!el) return;
@@ -91,8 +93,22 @@ export default function FlowDetail({
     const rect = colBtnRef.current?.getBoundingClientRect();
     if (rect) setColPickerPos({ x: rect.left, y: rect.bottom + 4 });
   };
+  const openTagPicker = () => {
+    const rect = tagBtnRef.current?.getBoundingClientRect();
+    if (rect) setTagPickerPos({ x: rect.left, y: rect.bottom + 4 });
+  };
 
   const activeCollections = (collections ?? []).filter((c) => flow.collections.includes(c.id));
+
+  const allTagsMerged = [...new Set([...allTags, ...tags])];
+  const tagMenuItems = allTagsMerged.map((t) => ({
+    icon: LucideIcons.Hash,
+    iconColor: "var(--green-300)",
+    label: t,
+    checked: tags.includes(t),
+    action: () => { if (tags.includes(t)) removeTag(t); else addTag(t); },
+    keepOpen: true,
+  }));
 
   const colMenuItems = (collections ?? [])
     .filter((c) => !c.archived)
@@ -106,24 +122,80 @@ export default function FlowDetail({
 
   const dotBtnRef = useRef(null);
 
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+
+  const itemWidth = containerWidth > 0 ? (containerWidth * zoom) / 2 : 0;
+  const maxOffset = itemWidth > 0 ? (screens.length - 1) * itemWidth : 0;
+  const selectedIdx = itemWidth > 0
+    ? Math.max(0, Math.min(Math.round(scrollOffset / itemWidth), screens.length - 1))
+    : 0;
   const hasPrev = selectedIdx > 0;
   const hasNext = selectedIdx < screens.length - 1;
 
-  const goTo = useCallback((idx) => {
-    setSelectedIdx(Math.max(0, Math.min(idx, screens.length - 1)));
-  }, [screens.length]);
+  const goTo = (idx) => {
+    const clamped = Math.max(0, Math.min(idx, screens.length - 1));
+    const offset = clamped * itemWidth;
+    setScrollOffset(offset);
+    scrollOffsetRef.current = offset;
+  };
 
-  // Reset to first screen when flow changes
+  // Reset when flow changes
   useEffect(() => {
-    setSelectedIdx(0);
+    setScrollOffset(0);
+    scrollOffsetRef.current = 0;
+    prevItemWidthRef.current = 0;
     setTitle(flow.title);
     setTags(flow.tags  ?? []);
     setNote(flow.note  ?? "");
     setColPickerPos(null);
+    setTagPickerPos(null);
     setDotMenuPos(null);
+    setZoom(1);
     if (titleRef.current) titleRef.current.innerText = flow.title || "";
     requestAnimationFrame(() => autoResize(noteRef.current));
   }, [flow.id]);
+
+  // Ctrl+wheel over the carousel → zoom screens
+  useEffect(() => {
+    const el = areaRef.current;
+    if (!el) return;
+    const handler = (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const z = zoomRef.current;
+      if (e.deltaY < 0) {
+        const next = ZOOM_STEPS.find(s => s > z);
+        if (next !== undefined) setZoom(next);
+      } else {
+        const prev = [...ZOOM_STEPS].reverse().find(s => s < z);
+        if (prev !== undefined) setZoom(prev);
+      }
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, []);
+
+  // Keep scroll position on the same item when itemWidth changes (resize / sidebar toggle)
+  useEffect(() => {
+    if (itemWidth === 0) return;
+    if (prevItemWidthRef.current > 0 && prevItemWidthRef.current !== itemWidth) {
+      const idx = Math.round(scrollOffsetRef.current / prevItemWidthRef.current);
+      const clamped = Math.max(0, Math.min(idx, screens.length - 1));
+      const next = clamped * itemWidth;
+      setScrollOffset(next);
+      scrollOffsetRef.current = next;
+    }
+    prevItemWidthRef.current = itemWidth;
+  }, [itemWidth, screens.length]);
+
+  useEffect(() => {
+    if (!areaRef.current) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setContainerWidth(entry.contentRect.width);
+    });
+    ro.observe(areaRef.current);
+    return () => ro.disconnect();
+  }, []);
 
   // Keyboard navigation
   useEffect(() => {
@@ -131,51 +203,12 @@ export default function FlowDetail({
       if (e.key === "Escape") { onClose(); return; }
       const tag = document.activeElement?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || document.activeElement?.isContentEditable) return;
-      if (e.key === "ArrowLeft"  && hasPrev) goTo(selectedIdx - 1);
-      if (e.key === "ArrowRight" && hasNext) goTo(selectedIdx + 1);
+      if (e.key === "ArrowLeft"  && hasPrevItem) onNavigate(allItems[allCurrentIndex - 1]);
+      if (e.key === "ArrowRight" && hasNextItem) onNavigate(allItems[allCurrentIndex + 1]);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose, hasPrev, hasNext, selectedIdx, goTo]);
-
-  useEffect(() => { selectedIdxRef.current = selectedIdx; }, [selectedIdx]);
-
-  useEffect(() => {
-    if (!areaRef.current) return;
-    const ro = new ResizeObserver(([entry]) => {
-      const w = entry.contentRect.width;
-      setContainerWidth(w);
-      setCardWidth(Math.min(w * 0.46, 320));
-    });
-    ro.observe(areaRef.current);
-    return () => ro.disconnect();
-  }, []);
-
-  const handleCarouselMouseDown = useCallback((e) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    let delta = 0;
-
-    const onMove = (ev) => {
-      delta = ev.clientX - startX;
-      setDragDelta(delta);
-      setIsSnapping(false);
-    };
-
-    const onUp = () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup",   onUp);
-      const idx = selectedIdxRef.current;
-      const len = screens.length;
-      if (delta < -60 && idx < len - 1) goTo(idx + 1);
-      else if (delta > 60 && idx > 0)   goTo(idx - 1);
-      setDragDelta(0);
-      setIsSnapping(true);
-    };
-
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup",   onUp);
-  }, [screens.length, goTo]);
+  }, [onClose, onNavigate, hasPrevItem, hasNextItem, allCurrentIndex, allItems]);
 
   const openDotMenu = () => {
     const rect = dotBtnRef.current?.getBoundingClientRect();
@@ -199,6 +232,31 @@ export default function FlowDetail({
     document.addEventListener("mouseup",   onUp);
   };
 
+  const handleCarouselMouseDown = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startOffset = scrollOffsetRef.current;
+    const currentMax = maxOffset;
+
+    const onMove = (ev) => {
+      const delta = startX - ev.clientX;
+      const next = Math.max(0, Math.min(startOffset + delta, currentMax));
+      setScrollOffset(next);
+      scrollOffsetRef.current = next;
+      setIsDragging(true);
+    };
+
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      setIsDragging(false);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
   const formattedDate = new Date(flow.created_at).toLocaleDateString("en-US", {
     year: "numeric", month: "long", day: "numeric",
   });
@@ -214,8 +272,6 @@ export default function FlowDetail({
 
   return (
     <>
-      <div className="detail-modal" onClick={(e) => e.stopPropagation()}>
-
         {/* ── Topbar ── */}
         <div className="detail-topbar">
           <div className="detail-topbar-nav">
@@ -242,7 +298,18 @@ export default function FlowDetail({
             )}
           </div>
 
-          <div style={{ flex: 1 }} />
+          {/* Zoom slider */}
+          <div className="detail-topbar-zoom">
+            <input
+              type="range"
+              className="detail-zoom-slider"
+              min={0}
+              max={ZOOM_STEPS.length - 1}
+              value={ZOOM_STEPS.indexOf(zoom) !== -1 ? ZOOM_STEPS.indexOf(zoom) : 2}
+              onChange={(e) => setZoom(ZOOM_STEPS[parseInt(e.target.value)])}
+              title={`Zoom: ${Math.round(zoom * 100)}%`}
+            />
+          </div>
 
           <div className="detail-topbar-actions">
             <button
@@ -273,7 +340,7 @@ export default function FlowDetail({
           <div
             ref={areaRef}
             className="flow-carousel-area"
-            style={{ cursor: "grab" }}
+            style={{ cursor: isDragging ? "grabbing" : "grab" }}
             onMouseDown={handleCarouselMouseDown}
           >
             {screens.length > 1 && (
@@ -281,7 +348,7 @@ export default function FlowDetail({
                 <button
                   className="flow-carousel-nav flow-carousel-nav--left"
                   onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => { e.stopPropagation(); goTo(selectedIdx - 1); }}
+                  onClick={() => goTo(selectedIdx - 1)}
                   disabled={!hasPrev}
                 >
                   <LucideIcons.ChevronLeft size={16} />
@@ -289,7 +356,7 @@ export default function FlowDetail({
                 <button
                   className="flow-carousel-nav flow-carousel-nav--right"
                   onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => { e.stopPropagation(); goTo(selectedIdx + 1); }}
+                  onClick={() => goTo(selectedIdx + 1)}
                   disabled={!hasNext}
                 >
                   <LucideIcons.ChevronRight size={16} />
@@ -297,20 +364,16 @@ export default function FlowDetail({
                 <span className="flow-carousel-screen-counter">{selectedIdx + 1} / {screens.length}</span>
               </>
             )}
-            {containerWidth > 0 && (
+            {itemWidth > 0 && (
               <div
                 className="flow-carousel-track"
-                style={{
-                  transform:  `translateX(${Math.round(containerWidth / 2 - cardWidth / 2 - selectedIdx * (cardWidth + CARD_GAP)) + dragDelta}px)`,
-                  transition: isSnapping ? "transform 200ms ease-out" : "none",
-                  gap: CARD_GAP,
-                }}
+                style={{ transform: `translateX(${-scrollOffset}px)` }}
               >
                 {screens.map((screen, idx) => (
                   <div
                     key={screen.id}
-                    className={`flow-carousel-card${idx !== selectedIdx ? " flow-carousel-card--adjacent" : ""}`}
-                    style={{ width: cardWidth }}
+                    className="flow-carousel-item"
+                    style={{ width: itemWidth }}
                   >
                     {imageUrls[screen.id]
                       ? <img src={imageUrls[screen.id]} alt={`Screen ${idx + 1}`} />
@@ -383,14 +446,12 @@ export default function FlowDetail({
                 </div>
 
                 <span className="detail-meta-label" style={{ marginTop: "14px" }}>Tags</span>
-                <TagInputBox
-                  compact
-                  tags={tags}
-                  allTags={allTags}
-                  onAdd={addTag}
-                  onRemove={removeTag}
-                  onRename={renameTag}
-                />
+                <div className="detail-pills-row">
+                  {tags.map((t) => (
+                    <TagChip key={t} label={t} onRemove={() => removeTag(t)} onRename={(newName) => renameTag(t, newName)} />
+                  ))}
+                  <button ref={tagBtnRef} className="detail-add-btn" onClick={openTagPicker}><LucideIcons.Plus size={16} /></button>
+                </div>
 
                 <div className="detail-meta-footer">
                   <p className="panel-date">{formattedDate}</p>
@@ -400,7 +461,6 @@ export default function FlowDetail({
             </>
           )}
         </div>
-      </div>
 
       {/* Dot menu portal */}
       {dotMenuPos && createPortal(
@@ -410,6 +470,24 @@ export default function FlowDetail({
             y={dotMenuPos.y}
             items={dotMenuItems}
             onClose={() => setDotMenuPos(null)}
+          />
+        </div>,
+        document.body
+      )}
+
+      {/* Tag picker portal */}
+      {tagPickerPos && createPortal(
+        <div onClick={(e) => e.stopPropagation()}>
+          <ContextMenu
+            x={tagPickerPos.x}
+            y={tagPickerPos.y}
+            items={tagMenuItems}
+            searchable
+            onAddNew={(name) => {
+              addTag(name);
+              setTagPickerPos(null);
+            }}
+            onClose={() => setTagPickerPos(null)}
           />
         </div>,
         document.body

@@ -2098,33 +2098,27 @@ html, body, #root { height: 100%; overflow: hidden; }
 .flow-carousel-track {
   display: flex;
   align-items: center;
-  position: absolute;
-  top: 0;
-  left: 0;
   height: 100%;
-  will-change: transform;
+  /* no transition — instant snap */
 }
 
-.flow-carousel-card {
+.flow-carousel-item {
   flex-shrink: 0;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  transition: opacity 200ms ease;
+  padding: 16px 8px;
+  cursor: pointer;
 }
 
-.flow-carousel-card img {
-  max-height: calc(100% - 32px);
+.flow-carousel-item img {
+  max-height: 100%;
   max-width: 100%;
   object-fit: contain;
   border-radius: 6px;
   pointer-events: none;
   display: block;
-}
-
-.flow-carousel-card--adjacent {
-  opacity: 0.55;
 }
 
 .flow-carousel-placeholder {
@@ -2273,77 +2267,6 @@ html, body, #root { height: 100%; overflow: hidden; }
   color: var(--muted);
 }
 
-.collection-tabs {
-  display: flex;
-  flex-shrink: 0;
-  gap: 0;
-  width: 100%;
-  border-bottom: 1px solid var(--border);
-  padding: 0 20px;
-  margin-top: 40px;
-  margin-bottom: 20px;
-  position: sticky;
-  top: 49px;
-  z-index: 9;
-  background: #191919;
-}
-.tab-btn {
-  all: unset;
-  font-size: 13px;
-  padding: 8px 14px;
-  cursor: pointer;
-  color: var(--muted);
-  transition: color 0.1s;
-  margin-bottom: -1px;
-}
-.tab-btn:hover  { color: var(--text); }
-.tab-btn.active { color: var(--text); font-weight: 500; border-bottom: 2px solid var(--accent); }
-
-/* ── Flows tab layout ────────────────────────────────────────────────────── */
-.flows-tab-layout {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  padding: 20px;
-}
-.flow-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-}
-.flow-row-title {
-  min-width: 120px;
-  max-width: 120px;
-  font-size: 13px;
-  font-weight: 500;
-  padding-top: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text);
-}
-.flow-row-screens {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  flex: 1;
-  padding-bottom: 4px;
-}
-.flow-row-screen {
-  flex-shrink: 0;
-  width: 160px;
-  height: 100px;
-  border-radius: 6px;
-  overflow: hidden;
-  cursor: pointer;
-  background: var(--grey-800);
-}
-.flow-row-screen:hover { opacity: 0.85; }
-.flow-row-screen img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
 
 /* ── Rubber band selection ───────────────────────────────────────────────── */
 .rubber-band {
@@ -4045,7 +3968,6 @@ textarea.ui-input { min-height: 80px; line-height: 1.5; }
 /* Main area container — white inner, mirrors dark mode's lighter inner */
 [data-theme="light"] .main-area { background: #ffffff; }
 [data-theme="light"] .toolbar { background: #ffffff; }
-[data-theme="light"] .collection-tabs { background: #ffffff; }
 
 [data-theme="light"] .sidebar-resize-handle:hover { background: rgba(0, 0, 0, 0.08); }
 [data-theme="light"] .grid-drop-overlay { background: rgba(255, 255, 255, 0.85); }
@@ -4081,6 +4003,12 @@ textarea.ui-input { min-height: 80px; line-height: 1.5; }
   background: var(--grey-50);
   border-color: var(--border);
 }
+[data-theme="light"] .ui-btn--secondary {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text);
+  box-shadow: none;
+}
+[data-theme="light"] .ui-btn--secondary:hover { background: rgba(0, 0, 0, 0.10); }
 
 /* ── Light mode overrides ─────────────────────────────────────────────────── */
 /* Shadow tokens auto-switch via [data-theme="light"] in globals.css.

@@ -735,7 +735,7 @@ export default function App() {
           onOptionsMenu={handleGridOptionsMenu}
           sidebarHidden={sidebarHidden}
           onToggleSidebar={handleToggleSidebar}
-          detailOpen={!!selectedItem}
+          detailOpen={!!selectedItem || !!flowDetail}
           allTags={allTags}
           onSelectTag={(tag) => setActiveView({ type: "tag", tag })}
           organizeMode={organizeMode}
@@ -753,6 +753,7 @@ export default function App() {
             className="detail-backdrop"
             onClick={() => { setSelectedItem(null); setFlowDetail(null); }}
           >
+            <div className="detail-modal" onClick={(e) => e.stopPropagation()}>
             {flowDetail ? (
               <FlowDetail
                 flow={flowDetail}
@@ -807,6 +808,7 @@ export default function App() {
                 onAddNewCollection={(name) => setCollectionPickerModal({ prefillName: name, itemId: selectedItem.id })}
               />
             )}
+            </div>
           </div>
         )}
 
@@ -942,6 +944,7 @@ export default function App() {
           imageFiles={pendingFiles}
           collections={collections.filter((c) => !c.archived)}
           allTags={allTags}
+          defaultCollectionId={activeView.type === "collection" ? activeView.id : null}
           onSave={handleSaveNew}
           onSaveFlow={handleSaveNewFlow}
           onCancel={() => { setPendingFiles([]); setAddOverlayOpen(false); }}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import * as LucideIcons from "lucide-react";
-import { TagInputBox } from "./ui/TagInputBox";
+import { TagChip } from "./ui/TagChip";
 import { CollectionChip } from "./ui/CollectionChip";
 import ContextMenu from "./ContextMenu";
 
@@ -32,10 +32,13 @@ export default function DetailPanel({
   const [panY,  setPanY]  = useState(0);
   const [isPanning, setIsPanning] = useState(false);
   const [colPickerPos, setColPickerPos] = useState(null);
+  const [tagPickerPos, setTagPickerPos] = useState(null);
   const [dotMenuPos,   setDotMenuPos]   = useState(null);
 
   const zoomRef    = useRef(zoom);
+  const imgAreaRef = useRef(null);
   const colBtnRef  = useRef(null);
+  const tagBtnRef  = useRef(null);
   const dotBtnRef  = useRef(null);
   const titleRef   = useRef(null);
   const noteRef    = useRef(null);
@@ -58,6 +61,7 @@ export default function DetailPanel({
     setTags(item.tags);
     setNote(item.note);
     setColPickerPos(null);
+    setTagPickerPos(null);
     setDotMenuPos(null);
     setZoom(1);
     setPanX(0);
@@ -71,8 +75,10 @@ export default function DetailPanel({
     if (zoom === 1) { setPanX(0); setPanY(0); }
   }, [zoom]);
 
-  // Ctrl+wheel → zoom image; on document so it beats browser zoom
+  // Ctrl+wheel over the image area → zoom image
   useEffect(() => {
+    const el = imgAreaRef.current;
+    if (!el) return;
     const handler = (e) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
@@ -85,8 +91,8 @@ export default function DetailPanel({
         if (prev !== undefined) setZoom(prev);
       }
     };
-    document.addEventListener("wheel", handler, { passive: false });
-    return () => document.removeEventListener("wheel", handler);
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
   }, []);
 
   // Keyboard: Escape to close, arrows to navigate
@@ -94,7 +100,7 @@ export default function DetailPanel({
     const handler = (e) => {
       if (e.key === "Escape") { onClose(); return; }
       const tag = document.activeElement?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (tag === "INPUT" || tag === "TEXTAREA" || document.activeElement?.isContentEditable) return;
       if (e.key === "ArrowLeft"  && hasPrev) onNavigate(allItems[currentIndex - 1]);
       if (e.key === "ArrowRight" && hasNext) onNavigate(allItems[currentIndex + 1]);
     };
@@ -156,6 +162,17 @@ export default function DetailPanel({
     onUpdate(item.id, { collections: next });
   };
 
+  // ContextMenu items for tags
+  const allTagsMerged = [...new Set([...allTags, ...tags])];
+  const tagMenuItems = allTagsMerged.map((t) => ({
+    icon: LucideIcons.Hash,
+    iconColor: "var(--green-300)",
+    label: t,
+    checked: tags.includes(t),
+    action: () => { if (tags.includes(t)) removeTag(t); else addTag(t); },
+    keepOpen: true,
+  }));
+
   // ContextMenu items for collections
   const colMenuItems = collections
     .filter((c) => !c.archived)
@@ -180,6 +197,10 @@ export default function DetailPanel({
   const openColPicker = () => {
     const rect = colBtnRef.current?.getBoundingClientRect();
     if (rect) setColPickerPos({ x: rect.left, y: rect.bottom + 4 });
+  };
+  const openTagPicker = () => {
+    const rect = tagBtnRef.current?.getBoundingClientRect();
+    if (rect) setTagPickerPos({ x: rect.left, y: rect.bottom + 4 });
   };
   const openDotMenu = () => {
     const rect = dotBtnRef.current?.getBoundingClientRect();
@@ -217,8 +238,6 @@ export default function DetailPanel({
 
   return (
     <>
-      <div className="detail-modal" onClick={(e) => e.stopPropagation()}>
-
         {/* ── Top bar ── */}
         <div className="detail-topbar">
           <div className="detail-topbar-nav">
@@ -283,6 +302,7 @@ export default function DetailPanel({
 
           {/* Image side */}
           <div
+            ref={imgAreaRef}
             className="detail-img-area"
             style={{ cursor: isPanning ? "grabbing" : zoom > 1 ? "grab" : "default" }}
             onMouseDown={handleImgAreaMouseDown}
@@ -364,14 +384,12 @@ export default function DetailPanel({
 
               {/* Tags */}
               <span className="detail-meta-label" style={{ marginTop: "14px" }}>Tags</span>
-              <TagInputBox
-                compact
-                tags={tags}
-                allTags={allTags}
-                onAdd={addTag}
-                onRemove={removeTag}
-                onRename={renameTag}
-              />
+              <div className="detail-pills-row">
+                {tags.map((t) => (
+                  <TagChip key={t} label={t} onRemove={() => removeTag(t)} onRename={(newName) => renameTag(t, newName)} />
+                ))}
+                <button ref={tagBtnRef} className="detail-add-btn" onClick={openTagPicker}><LucideIcons.Plus size={16} /></button>
+              </div>
 
               {/* Footer */}
               <div className="detail-meta-footer">
@@ -382,7 +400,6 @@ export default function DetailPanel({
             </>
           )}
         </div>
-      </div>
 
       {/* Collection picker portal */}
       {colPickerPos && createPortal(
@@ -397,6 +414,24 @@ export default function DetailPanel({
               onAddNewCollection?.(name);
             }}
             onClose={() => setColPickerPos(null)}
+          />
+        </div>,
+        document.body
+      )}
+
+      {/* Tag picker portal */}
+      {tagPickerPos && createPortal(
+        <div onClick={(e) => e.stopPropagation()}>
+          <ContextMenu
+            x={tagPickerPos.x}
+            y={tagPickerPos.y}
+            items={tagMenuItems}
+            searchable
+            onAddNew={(name) => {
+              addTag(name);
+              setTagPickerPos(null);
+            }}
+            onClose={() => setTagPickerPos(null)}
           />
         </div>,
         document.body

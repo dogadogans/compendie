@@ -631,7 +631,7 @@ Append to the end of `globals.css`:
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.nav-item:hover  { background: rgba(255,255,255,0.04); color: #ddd; }
+.nav-item:hover  { background: rgba(255,255,255,0.06); color: #ddd; }
 .nav-item.active { background: rgba(255,255,255,0.08); color: #fff; }
 .nav-item.muted  { color: #666; }
 

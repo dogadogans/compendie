@@ -14,12 +14,12 @@ function getItemTranslate(i, src, dst, itemHeight) {
   return 0;
 }
 
-function makeMeta(file) {
+function makeMeta(file, defaultCollectionId) {
   return {
     title:         file ? file.name.replace(/\.[^/.]+$/, "") : "",
     tags:          [],
     tagInput:      "",
-    collectionIds: [],
+    collectionIds: defaultCollectionId ? [defaultCollectionId] : [],
     note:          "",
   };
 }
@@ -28,6 +28,7 @@ export default function AddOverlay({
   imageFiles,
   collections,
   allTags = [],
+  defaultCollectionId = null,
   onSave,
   onSaveFlow,
   onCancel,
@@ -38,11 +39,11 @@ export default function AddOverlay({
 }) {
   const [mode,             setMode]             = useState("image");
   const [selectedIdx,      setSelectedIdx]      = useState(0);
-  const [imageMetas,       setImageMetas]       = useState(() => imageFiles.map(makeMeta));
+  const [imageMetas,       setImageMetas]       = useState(() => imageFiles.map((f) => makeMeta(f, defaultCollectionId)));
   const [flowTitle,          setFlowTitle]          = useState("");
   const [flowTagInput,       setFlowTagInput]       = useState("");
   const [flowTags,           setFlowTags]           = useState([]);
-  const [flowCollectionIds,  setFlowCollectionIds]  = useState([]);
+  const [flowCollectionIds,  setFlowCollectionIds]  = useState(() => defaultCollectionId ? [defaultCollectionId] : []);
   const [flowScreenIdx,    setFlowScreenIdx]    = useState(null); // which screen note is open
   const [previewUrls,      setPreviewUrls]      = useState([]);
   const [saving,        setSaving]        = useState(false);
@@ -62,7 +63,7 @@ export default function AddOverlay({
   useEffect(() => {
     setImageMetas((prev) => {
       if (prev.length === imageFiles.length) return prev;
-      return imageFiles.map((f, i) => prev[i] ?? makeMeta(f));
+      return imageFiles.map((f, i) => prev[i] ?? makeMeta(f, defaultCollectionId));
     });
     setSelectedIdx((prev) => Math.min(prev, Math.max(0, imageFiles.length - 1)));
   }, [imageFiles]);

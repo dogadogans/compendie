@@ -267,7 +267,6 @@ export default function Grid({
   onToggleSelect,
   detailOpen = false,
 }) {
-  const [activeTab, setActiveTab] = useState("images");
   const [activeId, setActiveId] = useState(null);
   const [overId, setOverId] = useState(null);
   const [zoom, setZoom] = useState(loadZoom);
@@ -307,9 +306,8 @@ export default function Grid({
 
   const gridAreaRef = useRef(null);
 
-  // Reset tab and scroll position whenever the active view changes
+  // Reset scroll position whenever the active view changes
   useEffect(() => {
-    setActiveTab("images");
     if (gridAreaRef.current) gridAreaRef.current.scrollTop = 0;
   }, [activeView]);
 
@@ -362,18 +360,7 @@ export default function Grid({
     [inCollection, collections, activeView]
   );
 
-  const imageItems = useMemo(
-    () => inCollection ? items.filter(i => i.type === "image") : items,
-    [items, inCollection]
-  );
-  const flowItems = useMemo(
-    () => inCollection ? items.filter(i => i.type === "flow") : items,
-    [items, inCollection]
-  );
-  const visibleItems = useMemo(
-    () => inCollection ? (activeTab === "images" ? imageItems : flowItems) : items,
-    [inCollection, activeTab, imageItems, flowItems, items]
-  );
+  const visibleItems = items;
 
   // Live reorder preview: as you drag over a card, the array shifts so masonry
   // re-lays cards into their new positions with a smooth CSS transition.
@@ -504,50 +491,12 @@ export default function Grid({
           )}
         </DndContext>
       )}
-      {inCollection && (
-        <div className="collection-tabs" style={subCollections.length === 0 ? { marginTop: 0 } : undefined}>
-          <button
-            className={`tab-btn${activeTab === "images" ? " active" : ""}`}
-            onClick={() => setActiveTab("images")}
-          >Images</button>
-          <button
-            className={`tab-btn${activeTab === "flows" ? " active" : ""}`}
-            onClick={() => setActiveTab("flows")}
-          >Flows</button>
-        </div>
-      )}
-
-      {inCollection && activeTab === "flows" ? (
-        flowItems.length === 0 ? (
-          <div className="empty-state">No flows in this collection.</div>
-        ) : (
-          <div className="flows-tab-layout">
-            {flowItems.map(flow => (
-              <div key={flow.id} className="flow-row">
-                <div className="flow-row-title">{flow.title || "Untitled"}</div>
-                <div className="flow-row-screens">
-                  {(flow.screens || []).map(screen => (
-                    <div
-                      key={screen.id}
-                      className="flow-row-screen"
-                      onClick={() => onCardClick(flow)}
-                    >
-                      {imageUrls[screen.id]
-                        ? <img src={imageUrls[screen.id]} alt="" draggable={false} onLoad={recalculate} />
-                        : <div className="card-placeholder" />}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )
-      ) : visibleItems.length === 0 ? (
+      {visibleItems.length === 0 ? (
         <div className={`empty-state${isDragging ? " drop-active" : ""}`}>
           {isDragging
             ? "Drop to save"
-            : inCollection && activeTab === "images"
-              ? "No images in this collection."
+            : inCollection
+              ? "Nothing in this collection yet."
               : "Drag an image in or paste with Ctrl+V to get started."}
         </div>
       ) : (
