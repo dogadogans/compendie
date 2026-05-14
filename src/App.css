@@ -3885,6 +3885,8 @@ textarea.ui-input { min-height: 80px; line-height: 1.5; }
 [data-theme="light"] .cpm-search:focus { border-color: rgba(0,0,0,0.2); }
 [data-theme="light"] .cpm-row:hover:not(.disabled) { background: rgba(0,0,0,0.05); }
 [data-theme="light"] .cpm-row.picked { background: rgba(0,0,0,0.08); }
+[data-theme="light"] .cpm-footer { border-top-color: var(--border); }
+[data-theme="light"] .cpm-list { scrollbar-color: rgba(0,0,0,0.15) transparent; }
 [data-theme="light"] .selection-bar-clear:hover { background: rgba(0, 0, 0, 0.06); }
 [data-theme="light"] .selection-bar-btn { background: rgba(0, 0, 0, 0.07); }
 [data-theme="light"] .selection-bar-btn:hover { background: rgba(0, 0, 0, 0.12); }
