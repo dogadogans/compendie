@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { X, Check } from "lucide-react";
 import * as Icons from "lucide-react";
@@ -21,8 +21,8 @@ export default function CollectionPickerModal({
   const [pickedIds, setPickedIds] = useState(new Set());
   const [search, setSearch] = useState("");
 
-  const selectedItems = items.filter((i) => selectedIds.has(i.id));
-  const nonArchived = collections.filter((c) => !c.archived);
+  const selectedItems = useMemo(() => items.filter((i) => selectedIds.has(i.id)), [items, selectedIds]);
+  const nonArchived = useMemo(() => collections.filter((c) => !c.archived), [collections]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return nonArchived;
@@ -49,6 +49,12 @@ export default function CollectionPickerModal({
       });
     }
   };
+
+  useEffect(() => {
+    const handle = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handle);
+    return () => document.removeEventListener("keydown", handle);
+  }, [onClose]);
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -108,7 +114,7 @@ export default function CollectionPickerModal({
                   key={col.id}
                   className={`cpm-row${isPicked ? " picked" : ""}${allIn ? " disabled" : ""}`}
                   disabled={allIn}
-                  onClick={() => !allIn && handleRowClick(col.id)}
+                  onClick={() => handleRowClick(col.id)}
                 >
                   <ColIcon icon={col.icon} color={col.color} />
                   <span className="cpm-row-name">{col.name}</span>
