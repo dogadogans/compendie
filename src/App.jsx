@@ -379,16 +379,6 @@ export default function App() {
     handleClearSelection();
   }, [selectedIds, activeView, handleUpdate, handleClearSelection]);
 
-  // Copy selected items into targetId without removing from current collection
-  const handleBulkCopy = useCallback(async (targetId) => {
-    const ids = [...selectedIds];
-    await Promise.all(ids.map((id) => {
-      const item = itemsRef.current.find((i) => i.id === id);
-      if (!item || item.collections.includes(targetId)) return;
-      return handleUpdate(id, { collections: [...item.collections, targetId] });
-    }));
-    handleClearSelection();
-  }, [selectedIds, handleUpdate, handleClearSelection]);
 
   // Copy selected items into multiple target collections at once
   const handleBulkCopyMultiple = useCallback(async (targetIds) => {
@@ -683,7 +673,6 @@ export default function App() {
   };
 
   // Stable callbacks for selection bar — must be outside JSX to satisfy Rules of Hooks
-  const handleClosePickerMode = useCallback(() => setPickerMode(null), []);
   const handleCloseActionMenu = useCallback(() => setActionMenuOpen(false), []);
 
   return (
@@ -932,9 +921,10 @@ export default function App() {
         />
       )}
 
-      {pickerMode && (
-        <AnimatePresence>
+      <AnimatePresence>
+        {pickerMode && (
           <CollectionPickerModal
+            key="collection-picker-modal"
             mode={pickerMode}
             selectedIds={selectedIds}
             items={items}
@@ -960,8 +950,8 @@ export default function App() {
             }}
             onClose={() => setPickerMode(null)}
           />
-        </AnimatePresence>
-      )}
+        )}
+      </AnimatePresence>
 
       {quickFolderOpen && activeView.type === "collection" && (
         <QuickFolderModal
