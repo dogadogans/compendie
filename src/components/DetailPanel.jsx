@@ -26,7 +26,7 @@ export default function DetailPanel({
   const [zoom,  setZoom]              = useState(1);
   const [metaHidden,  setMetaHidden]  = useState(false);
   const [metaWidth,   setMetaWidth]   = useState(
-    () => parseInt(localStorage.getItem("tome_detail_meta_width") || "320")
+    () => parseInt(localStorage.getItem("compendie_detail_meta_width") || "320")
   );
   const [panX,  setPanX]  = useState(0);
   const [panY,  setPanY]  = useState(0);
@@ -214,7 +214,7 @@ export default function DetailPanel({
     const onMove = (ev) => {
       const next = Math.min(520, Math.max(240, startWidth + (startX - ev.clientX)));
       setMetaWidth(next);
-      localStorage.setItem("tome_detail_meta_width", next);
+      localStorage.setItem("compendie_detail_meta_width", next);
     };
     const onUp = () => {
       document.removeEventListener("mousemove", onMove);

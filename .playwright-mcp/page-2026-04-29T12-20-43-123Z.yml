@@ -1,0 +1,16 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: Compendie
+      - button "+" [ref=e7] [cursor=pointer]
+    - navigation [ref=e8]:
+      - button "All" [ref=e9] [cursor=pointer]
+      - button "Unorganized" [ref=e10] [cursor=pointer]
+    - generic [ref=e13]:
+      - generic [ref=e14]: Collections
+      - button "+" [ref=e15] [cursor=pointer]
+  - generic [ref=e18]:
+    - banner [ref=e19]:
+      - searchbox "Search…" [ref=e20]
+      - slider "Zoom (or Ctrl+scroll)" [ref=e21] [cursor=pointer]: "230"
+    - generic [ref=e22]: Drag an image in or paste with Ctrl+V to get started.

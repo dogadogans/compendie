@@ -1,4 +1,4 @@
-# Tome
+# Compendie
 **tagline:** Your personal visual archive. Screenshots, flows, collections — all yours.
 **version:** v1.0
 **stack:** Tauri 2 + React + Vite
@@ -16,7 +16,7 @@ Skill location: `.claude/skills/emil-design-eng/SKILL.md`
 
 ## The problem
 
-You screenshot something interesting and it disappears into your downloads folder forever. You capture a UI flow and the screens pile up as unrelated images in Figma. No tags, no visual grid, no way to find things or see them in sequence. mymind costs money. Eagle is too heavy. Mobbin is too expensive. Tome is yours — calm, local, intentional, and open source.
+You screenshot something interesting and it disappears into your downloads folder forever. You capture a UI flow and the screens pile up as unrelated images in Figma. No tags, no visual grid, no way to find things or see them in sequence. mymind costs money. Eagle is too heavy. Mobbin is too expensive. Compendie is yours — calm, local, intentional, and open source.
 
 ---
 
@@ -28,7 +28,7 @@ You screenshot something interesting and it disappears into your downloads folde
 
 ## Naming
 
-- **App name:** Tome
+- **App name:** Compendie
 - **Inspired by:** The Hyrule Compendium from Breath of the Wild / Tears of the Kingdom — a personal visual archive of everything you've discovered
 - **Architecture:** Built to support Mac later (Tauri 2 is cross-platform). Windows-first for v1.
 
@@ -36,7 +36,7 @@ You screenshot something interesting and it disappears into your downloads folde
 
 ## Content types
 
-Tome has two content types:
+Compendie has two content types:
 
 **Image** — a single screenshot. Opens a right side drawer on click.
 
@@ -64,7 +64,7 @@ Collections
   UI Patterns
     Navigation
     Modals
-  Tome
+  Compendie
   Anne's Spider
 ─────────────────
 Archived             ← collapsed by default
@@ -101,7 +101,7 @@ Two entry points:
 - Ctrl+V with an image copied to clipboard
 
 What happens:
-- Image saved to `~/tome/images/` via Tauri FS API
+- Image saved to `~/compendie/images/` via Tauri FS API
 - Small inline form: tag input (type + enter = tag pill) + optional note field
 - Save → appears in grid immediately
 
@@ -113,7 +113,7 @@ Entry point: Add button → "New Flow"
 
 What happens:
 - Name the flow (e.g. "Spotify onboarding")
-- Add images in order — drag from finder, Ctrl+V, or pick from existing images already in Tome
+- Add images in order — drag from finder, Ctrl+V, or pick from existing images already in Compendie
 - Reorder by dragging within the flow builder
 - Add tags and optional note to the whole flow
 - Save → appears in grid as a flow card
@@ -185,7 +185,7 @@ An image can belong to multiple collections. Removing from a collection never de
   "id": "uuid",
   "type": "image",
   "title": "string",
-  "image_path": "~/tome/images/filename.png",
+  "image_path": "~/compendie/images/filename.png",
   "tags": ["tag1", "tag2"],
   "collections": ["collection-id-1"],
   "note": "optional short text",
@@ -200,7 +200,7 @@ An image can belong to multiple collections. Removing from a collection never de
   "type": "flow",
   "title": "string",
   "screens": [
-    { "id": "uuid", "image_path": "~/tome/images/filename.png", "note": "optional" }
+    { "id": "uuid", "image_path": "~/compendie/images/filename.png", "note": "optional" }
   ],
   "tags": ["tag1", "tag2"],
   "collections": ["collection-id-1"],
@@ -221,8 +221,8 @@ An image can belong to multiple collections. Removing from a collection never de
 }
 ```
 
-Images saved to: `~/tome/images/`
-Data file at: `~/tome/data.json`
+Images saved to: `~/compendie/images/`
+Data file at: `~/compendie/data.json`
 
 ---
 

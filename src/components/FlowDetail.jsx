@@ -28,7 +28,7 @@ export default function FlowDetail({
   const [scrollOffset, setScrollOffset] = useState(0);
   const [metaHidden, setMetaHidden]   = useState(false);
   const [metaWidth,  setMetaWidth]    = useState(
-    () => parseInt(localStorage.getItem("tome_flow_detail_meta_width") || "320")
+    () => parseInt(localStorage.getItem("compendie_flow_detail_meta_width") || "320")
   );
   const [zoom,       setZoom]         = useState(1);
   const [dotMenuPos, setDotMenuPos]   = useState(null);
@@ -222,7 +222,7 @@ export default function FlowDetail({
     const onMove = (ev) => {
       const next = Math.min(520, Math.max(240, startWidth + (startX - ev.clientX)));
       setMetaWidth(next);
-      localStorage.setItem("tome_flow_detail_meta_width", next);
+      localStorage.setItem("compendie_flow_detail_meta_width", next);
     };
     const onUp = () => {
       document.removeEventListener("mousemove", onMove);

@@ -1,0 +1,35 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: Compendie
+      - button "+" [ref=e7] [cursor=pointer]
+    - navigation [ref=e8]:
+      - button "All" [ref=e9] [cursor=pointer]
+      - button "Unorganized" [ref=e10] [cursor=pointer]
+    - generic [ref=e13]:
+      - generic [ref=e14]: Collections
+      - button "+" [ref=e15] [cursor=pointer]
+  - generic [ref=e40]:
+    - generic [ref=e41]:
+      - generic [ref=e42]: New Collection
+      - button [ref=e43] [cursor=pointer]:
+        - img [ref=e44]
+    - generic [ref=e48]:
+      - generic [ref=e49]:
+        - generic [ref=e50]: Collection Name
+        - textbox [active] [ref=e51]
+      - generic [ref=e52]:
+        - generic [ref=e53] [cursor=pointer]:
+          - generic [ref=e54]: Collection Icon
+          - generic [ref=e55]:
+            - img [ref=e56]
+            - img [ref=e58]
+        - generic [ref=e62] [cursor=pointer]:
+          - generic [ref=e63]: Collection Color
+          - img [ref=e66]
+      - button "Save" [disabled] [ref=e69]
+  - generic [ref=e18]:
+    - banner [ref=e19]:
+      - searchbox "Search…" [ref=e20]
+      - slider "Zoom (or Ctrl+scroll)" [ref=e21] [cursor=pointer]: "230"
+    - generic [ref=e22]: Drag an image in or paste with Ctrl+V to get started.

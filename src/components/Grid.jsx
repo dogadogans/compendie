@@ -46,7 +46,7 @@ function clampZoom(v) {
 }
 
 function loadZoom() {
-  const saved = parseInt(localStorage.getItem("tome-zoom"), 10);
+  const saved = parseInt(localStorage.getItem("compendie-zoom"), 10);
   return isNaN(saved) ? ZOOM_DEFAULT : clampZoom(saved);
 }
 
@@ -277,7 +277,7 @@ export default function Grid({
   function changeZoom(newZoom) {
     const v = clampZoom(newZoom);
     setZoom(v);
-    localStorage.setItem("tome-zoom", v);
+    localStorage.setItem("compendie-zoom", v);
     setIsZooming(true);
     clearTimeout(zoomTimerRef.current);
     zoomTimerRef.current = setTimeout(() => setIsZooming(false), 300);
@@ -323,7 +323,7 @@ export default function Grid({
       // deltaY > 0 = scroll down = zoom out (smaller images)
       setZoom((prev) => {
         const next = clampZoom(prev - Math.sign(e.deltaY) * ZOOM_STEP);
-        localStorage.setItem("tome-zoom", next);
+        localStorage.setItem("compendie-zoom", next);
         return next;
       });
       setIsZooming(true);
