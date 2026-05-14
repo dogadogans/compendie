@@ -20,7 +20,7 @@ import FlowDetail from "./components/FlowDetail";
 import CreateCollectionModal from "./components/CreateCollectionModal";
 import AlertDialog from "./components/AlertDialog";
 import ActionsDropdown  from "./components/ActionsDropdown";
-import CollectionPicker from "./components/CollectionPicker";
+import CollectionPickerModal from "./components/CollectionPickerModal";
 import QuickFolderModal from "./components/QuickFolderModal";
 import { AnimatePresence, motion } from "framer-motion";
 import { Toaster, toast } from "./components/Toast";
@@ -390,6 +390,18 @@ export default function App() {
     handleClearSelection();
   }, [selectedIds, handleUpdate, handleClearSelection]);
 
+  // Copy selected items into multiple target collections at once
+  const handleBulkCopyMultiple = useCallback(async (targetIds) => {
+    const ids = [...selectedIds];
+    await Promise.all(ids.map((id) => {
+      const item = itemsRef.current.find((i) => i.id === id);
+      if (!item) return;
+      const newCols = [...new Set([...item.collections, ...targetIds])];
+      return handleUpdate(id, { collections: newCols });
+    }));
+    handleClearSelection();
+  }, [selectedIds, handleUpdate, handleClearSelection]);
+
   // Delete all selected items one by one
   const handleBulkDelete = useCallback(async () => {
     const ids = [...selectedIds];
@@ -587,8 +599,8 @@ export default function App() {
         setAlertDialog({
           title: isFlow ? "Delete this flow?" : "Delete this image?",
           message: isFlow
-            ? "This will permanently remove the flow and all its screens from Tome."
-            : "This will permanently remove the image from Tome.",
+            ? "This will permanently remove the flow and all its screens from Compendie."
+            : "This will permanently remove the image from Compendie.",
           confirmLabel: "Delete",
           onConfirm: () => { setAlertDialog(null); handleDelete(item.id); },
         });
@@ -768,7 +780,7 @@ export default function App() {
                 onDelete={(id) => {
                   setAlertDialog({
                     title: "Delete this flow?",
-                    message: "This will permanently remove the flow and all its screens from Tome.",
+                    message: "This will permanently remove the flow and all its screens from Compendie.",
                     confirmLabel: "Delete",
                     onConfirm: () => { setAlertDialog(null); handleDelete(id); setFlowDetail(null); },
                   });
@@ -793,8 +805,8 @@ export default function App() {
                   setAlertDialog({
                     title: it?.type === "flow" ? "Delete this flow?" : "Delete this image?",
                     message: it?.type === "flow"
-                      ? "This will permanently remove the flow and all its screens from Tome."
-                      : "This will permanently remove the image from Tome.",
+                      ? "This will permanently remove the flow and all its screens from Compendie."
+                      : "This will permanently remove the image from Compendie.",
                     confirmLabel: "Delete",
                     onConfirm: () => { setAlertDialog(null); handleDelete(id); },
                   });
@@ -844,22 +856,12 @@ export default function App() {
                       const n = selectedIds.size;
                       setAlertDialog({
                         title: `Delete ${n} ${n === 1 ? "item" : "items"}?`,
-                        message: "This cannot be undone. Deleted items are removed from Tome permanently.",
+                        message: "This cannot be undone. Deleted items are removed from Compendie permanently.",
                         confirmLabel: `Delete ${n === 1 ? "item" : `${n} items`}`,
                         onConfirm: async () => { setAlertDialog(null); await handleBulkDelete(); },
                       });
                     }}
                     onClose={handleCloseActionMenu}
-                  />
-                )}
-                {pickerMode && (
-                  <CollectionPicker
-                    mode={pickerMode}
-                    collections={collections}
-                    selectedIds={selectedIds}
-                    items={items}
-                    onPick={pickerMode === "move" ? handleBulkMove : handleBulkCopy}
-                    onClose={handleClosePickerMode}
                   />
                 )}
               </div>
@@ -928,6 +930,37 @@ export default function App() {
           onConfirm={alertDialog.onConfirm}
           onClose={() => setAlertDialog(null)}
         />
+      )}
+
+      {pickerMode && (
+        <AnimatePresence>
+          <CollectionPickerModal
+            mode={pickerMode}
+            selectedIds={selectedIds}
+            items={items}
+            collections={collections}
+            imageUrls={imageUrls}
+            onConfirm={(colIds) => {
+              if (pickerMode === "move") {
+                const col = collections.find((c) => c.id === colIds[0]);
+                handleBulkMove(colIds[0]);
+                toast(`Moved to ${col?.name ?? "collection"}`);
+              } else {
+                const names = colIds
+                  .map((id) => collections.find((c) => c.id === id)?.name)
+                  .filter(Boolean);
+                handleBulkCopyMultiple(colIds);
+                toast(
+                  names.length === 1
+                    ? `Copied to ${names[0]}`
+                    : `Copied to ${names.length} collections`
+                );
+              }
+              setPickerMode(null);
+            }}
+            onClose={() => setPickerMode(null)}
+          />
+        </AnimatePresence>
       )}
 
       {quickFolderOpen && activeView.type === "collection" && (
