@@ -930,16 +930,16 @@ export default function App() {
             items={items}
             collections={collections}
             imageUrls={imageUrls}
-            onConfirm={(colIds) => {
+            onConfirm={async (colIds) => {
               if (pickerMode === "move") {
                 const col = collections.find((c) => c.id === colIds[0]);
-                handleBulkMove(colIds[0]);
+                await handleBulkMove(colIds[0]);
                 toast(`Moved to ${col?.name ?? "collection"}`);
               } else {
                 const names = colIds
                   .map((id) => collections.find((c) => c.id === id)?.name)
                   .filter(Boolean);
-                handleBulkCopyMultiple(colIds);
+                await handleBulkCopyMultiple(colIds);
                 toast(
                   names.length === 1
                     ? `Copied to ${names[0]}`
